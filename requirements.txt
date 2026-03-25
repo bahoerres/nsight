@@ -1,0 +1,6 @@
+flask
+gunicorn
+markdown
+markupsafe
+psycopg2-binary
+python-dotenv

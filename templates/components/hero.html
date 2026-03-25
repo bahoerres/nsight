@@ -1,0 +1,29 @@
+{# Hero banner macro
+   Usage:
+     {% from 'components/hero.html' import hero %}
+     {{ hero(image='home.jpg', title='Good evening, Blake', subtitle='March 25, 2026',
+             summary='Your health metrics look great today.', score=82, score_label='Overall') }}
+#}
+
+{% from 'components/score_circle.html' import score_circle %}
+
+{% macro hero(image, title, subtitle='', summary='', score=None, score_label='Score') %}
+<div class="hero" style="background-image: url('{{ url_for('static', filename='heroes/' + image) }}')">
+  <div class="hero-inner">
+    <div class="hero-text">
+      <h1 class="hero-title">{{ title }}</h1>
+      {% if subtitle %}
+        <p class="hero-subtitle">{{ subtitle }}</p>
+      {% endif %}
+      {% if summary %}
+        <p class="hero-summary">{{ summary }}</p>
+      {% endif %}
+    </div>
+    {% if score is not none %}
+      <div class="hero-score">
+        {{ score_circle(score=score, label=score_label, size=120) }}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}

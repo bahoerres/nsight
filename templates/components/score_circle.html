@@ -1,0 +1,38 @@
+{# Score circle macro — SVG ring showing 0-100 score
+   Usage:
+     {% from 'components/score_circle.html' import score_circle %}
+     {{ score_circle(score=82, label='Overall', size=120, href='/health') }}
+#}
+
+{% macro score_circle(score, label='Score', size=120, href=None) %}
+{%- set radius = (size / 2) - 8 -%}
+{%- set circumference = 2 * 3.14159 * radius -%}
+{%- set offset = circumference - (score / 100.0) * circumference -%}
+{%- if score >= 80 -%}
+  {%- set color = 'var(--score-good)' -%}
+{%- elif score >= 60 -%}
+  {%- set color = 'var(--score-fair)' -%}
+{%- else -%}
+  {%- set color = 'var(--score-poor)' -%}
+{%- endif -%}
+<div class="score-circle">
+  {% if href %}<a href="{{ href }}">{% endif %}
+  <svg width="{{ size }}" height="{{ size }}" viewBox="0 0 {{ size }} {{ size }}">
+    <circle class="score-circle-track"
+            cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ radius }}"/>
+    <circle class="score-circle-fill"
+            cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ radius }}"
+            stroke="{{ color }}"
+            stroke-dasharray="{{ circumference }}"
+            stroke-dashoffset="{{ offset }}"/>
+  </svg>
+  <span class="score-number metric-value"
+        style="top: {{ size / 2 - (size * 0.13) }}px; left: 50%;
+               transform: translateX(-50%);
+               font-size: {{ size * 0.3 }}px;">
+    {{ score }}
+  </span>
+  <span class="score-label">{{ label }}</span>
+  {% if href %}</a>{% endif %}
+</div>
+{% endmacro %}

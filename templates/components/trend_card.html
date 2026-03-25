@@ -1,0 +1,29 @@
+{# Trend card macro — metric card with sparkline placeholder
+   Usage:
+     {% from 'components/trend_card.html' import trend_card %}
+     {{ trend_card(id='hrv', label='Heart Rate Variability', value='15', unit='ms',
+                   avg='16', avg_label='Avg 14 – 18', status='Normal', status_color='normal') }}
+#}
+
+{% macro trend_card(id, label, value, unit='', avg='', avg_label='', status='', status_color='normal') %}
+<div class="card trend-card">
+  <div class="trend-label">{{ label }}</div>
+  <div class="trend-value-row">
+    <span class="trend-value metric-value">{{ value }}</span>
+    {% if unit %}<span class="trend-unit">{{ unit }}</span>{% endif %}
+  </div>
+  <div class="trend-sparkline">
+    <canvas id="spark-{{ id }}"></canvas>
+  </div>
+  <div style="display: flex; align-items: center; justify-content: space-between;">
+    {% if avg or avg_label %}
+      <span class="trend-avg">
+        {% if avg_label %}{{ avg_label }}{% elif avg %}Avg <span>{{ avg }}</span>{% endif %}
+      </span>
+    {% endif %}
+    {% if status %}
+      <span class="pill pill-{{ status_color }}">{{ status }}</span>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}

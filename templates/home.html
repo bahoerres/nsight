@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% from 'components/hero.html' import hero %}
+
+{% block title %}nsight — Home{% endblock %}
+
+{% block hero %}
+  {{ hero(image='home.jpg', title=greeting, subtitle=today_str,
+          summary='Your personal health intelligence dashboard.', score=82, score_label='Overall') }}
+{% endblock %}
+
+{% block content %}
+<div class="mt-section">
+  <h2>Coming soon</h2>
+  <p class="text-secondary" style="margin-top: 8px;">
+    Dashboard pages are being built. Check back shortly.
+  </p>
+</div>
+{% endblock %}

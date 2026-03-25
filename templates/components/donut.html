@@ -1,0 +1,38 @@
+{# Donut macro — 30-day performance donut with legend
+   Usage:
+     {% from 'components/donut.html' import donut %}
+     {{ donut(id='recovery-perf', good=9, fair=15, poor=6, label='30 Day Overview') }}
+#}
+
+{% macro donut(id, good=0, fair=0, poor=0, label='30 Day Overview') %}
+<div>
+  {% if label %}
+    <h4 style="margin-bottom: 16px;">{{ label }}</h4>
+  {% endif %}
+  <div class="donut-container">
+    <div class="donut-canvas-wrap">
+      <canvas id="donut-{{ id }}"
+              data-good="{{ good }}"
+              data-fair="{{ fair }}"
+              data-poor="{{ poor }}"></canvas>
+    </div>
+    <div class="donut-legend">
+      <div class="donut-legend-item">
+        <span class="donut-legend-dot" style="background: var(--score-good)"></span>
+        Good &gt; 80%
+        <span class="donut-legend-count">{{ good }}</span>
+      </div>
+      <div class="donut-legend-item">
+        <span class="donut-legend-dot" style="background: var(--score-fair)"></span>
+        Fair 60% &ndash; 79%
+        <span class="donut-legend-count">{{ fair }}</span>
+      </div>
+      <div class="donut-legend-item">
+        <span class="donut-legend-dot" style="background: var(--score-poor)"></span>
+        Poor &lt; 60%
+        <span class="donut-legend-count">{{ poor }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
