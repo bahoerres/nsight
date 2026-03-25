@@ -33,30 +33,16 @@
     filter: brightness(1.1);
   }
 
-  /* ── Home Layout ───────────────────────────────────────────── */
-  .home-layout {
+  /* ── Trends Grid (2 rows x 3 cols) ──────────────────────────── */
+  .trends-grid {
     display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: var(--section-gap);
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
     margin-top: var(--section-gap);
   }
 
-  .home-main {
-    min-width: 0;
-  }
-
-  .home-sidebar {
-    min-width: 0;
-  }
-
-  .trends-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .trends-list .trend-card {
-    padding: 16px;
+  .trends-grid .trend-card {
+    padding: 18px 20px;
   }
 
   /* ── Trend Delta ───────────────────────────────────────────── */
@@ -80,10 +66,38 @@
     background: rgba(234, 105, 98, 0.12);
   }
 
+  /* ── Chart Cards ───────────────────────────────────────────── */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .chart-card {
+    padding: 20px;
+  }
+
+  .chart-card-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .chart-wrap {
+    height: 160px;
+    position: relative;
+  }
+
+  .chart-wrap canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
   /* ── Workout Cards ─────────────────────────────────────────── */
   .workout-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
   }
 
@@ -158,41 +172,18 @@
     letter-spacing: 0.04em;
   }
 
-  /* ── Chart Cards ───────────────────────────────────────────── */
-  .chart-card {
-    padding: 20px;
-  }
-
-  .chart-card-title {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    margin-bottom: 16px;
-  }
-
-  .chart-wrap {
-    height: 160px;
-    position: relative;
-  }
-
-  .chart-wrap canvas {
-    width: 100% !important;
-    height: 100% !important;
-  }
-
   /* ── Responsive ────────────────────────────────────────────── */
-  @media (max-width: 1100px) {
-    .home-layout {
-      grid-template-columns: 1fr;
+  @media (max-width: 900px) {
+    .trends-grid {
+      grid-template-columns: repeat(2, 1fr);
     }
 
-    .home-sidebar {
-      order: 2;
+    .charts-grid {
+      grid-template-columns: repeat(2, 1fr);
     }
 
-    .trends-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    .workout-cards {
+      grid-template-columns: repeat(2, 1fr);
     }
   }
 
@@ -206,12 +197,12 @@
       width: 80px;
       height: 80px;
     }
+  }
 
+  @media (max-width: 580px) {
+    .trends-grid,
+    .charts-grid,
     .workout-cards {
-      grid-template-columns: 1fr;
-    }
-
-    .trends-list {
       grid-template-columns: 1fr;
     }
   }
@@ -248,206 +239,190 @@
   </div>
 </section>
 
-{# ── Main + Sidebar Layout ────────────────────────────────────── #}
-<div class="home-layout">
+{# ── Your Trends (2x3 grid, top section) ─────────────────────── #}
+<section class="mt-section">
+  <div class="section-header">
+    <h3 class="section-title">Your Trends</h3>
+  </div>
+  <div class="trends-grid">
 
-  {# ── Main Column ─────────────────────────────────────────────── #}
-  <div class="home-main">
+    {% set t = trends.get('hrv', {}) %}
+    <div class="card trend-card">
+      <div class="trend-label">Heart Rate Variability</div>
+      <div class="trend-value-row">
+        <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+        <span class="trend-unit">{{ t.get('unit', 'ms') }}</span>
+        {% if t.get('delta') is not none %}
+          <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+            {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+          </span>
+        {% endif %}
+      </div>
+      <div class="trend-sparkline">
+        <canvas id="spark-hrv"></canvas>
+      </div>
+    </div>
 
-    {# ── Recent Activity ───────────────────────────────────────── #}
-    {% if recent_workouts %}
-    <section>
-      <div class="section-header">
-        <h3 class="section-title">Recent Activity</h3>
-        <a href="/training" class="section-action">
-          See All
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-        </a>
+    {% set t = trends.get('resting_hr', {}) %}
+    <div class="card trend-card">
+      <div class="trend-label">Resting Heart Rate</div>
+      <div class="trend-value-row">
+        <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+        <span class="trend-unit">{{ t.get('unit', 'bpm') }}</span>
+        {% if t.get('delta') is not none %}
+          <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) != t.higher_is_better else 'trend-delta-down' }}">
+            {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+          </span>
+        {% endif %}
       </div>
-      <div class="workout-cards">
-        {% for w in recent_workouts %}
-        <div class="card workout-card">
-          <div class="workout-card-header">
-            <span class="workout-date">{{ w.date_str }}</span>
-            {% if w.duration %}
-              <span class="workout-duration">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12 6 12 12 16 14"/>
-                </svg>
-                {{ w.duration }} min
-              </span>
-            {% endif %}
-          </div>
-          <div class="workout-muscles">
-            {% for m in w.muscle_groups %}
-              <span class="muscle-tag">{{ m }}</span>
-            {% endfor %}
-          </div>
-          <div class="workout-stats">
-            <div class="workout-stat">
-              <span class="workout-stat-value metric-value">{{ "{:,}".format(w.total_volume) }}</span>
-              <span class="workout-stat-label">lbs volume</span>
-            </div>
-            <div class="workout-stat">
-              <span class="workout-stat-value metric-value">{{ w.set_count }}</span>
-              <span class="workout-stat-label">sets</span>
-            </div>
-          </div>
-        </div>
-        {% endfor %}
+      <div class="trend-sparkline">
+        <canvas id="spark-rhr"></canvas>
       </div>
-    </section>
-    {% endif %}
+    </div>
 
-    {# ── Weekly Charts ─────────────────────────────────────────── #}
-    <section class="mt-section">
-      <div class="section-header">
-        <h3 class="section-title">This Week</h3>
+    {% set t = trends.get('steps', {}) %}
+    <div class="card trend-card">
+      <div class="trend-label">Steps</div>
+      <div class="trend-value-row">
+        <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+        {% if t.get('delta') is not none %}
+          <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+            {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+          </span>
+        {% endif %}
       </div>
-      <div class="card-grid">
-        <div class="card chart-card">
-          <h4 class="chart-card-title">Avg Heart Rate</h4>
-          <div class="chart-wrap">
-            <canvas id="chart-weekly-hr"></canvas>
-          </div>
-        </div>
-        <div class="card chart-card">
-          <h4 class="chart-card-title">Time Asleep</h4>
-          <div class="chart-wrap">
-            <canvas id="chart-weekly-sleep"></canvas>
-          </div>
-        </div>
-        <div class="card chart-card">
-          <h4 class="chart-card-title">Steps</h4>
-          <div class="chart-wrap">
-            <canvas id="chart-weekly-steps"></canvas>
-          </div>
-        </div>
+      <div class="trend-sparkline">
+        <canvas id="spark-steps"></canvas>
       </div>
-    </section>
+    </div>
+
+    {% set t = trends.get('body_battery', {}) %}
+    <div class="card trend-card">
+      <div class="trend-label">Body Battery</div>
+      <div class="trend-value-row">
+        <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+        {% if t.get('delta') is not none %}
+          <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+            {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+          </span>
+        {% endif %}
+      </div>
+      <div class="trend-sparkline">
+        <canvas id="spark-bb"></canvas>
+      </div>
+    </div>
+
+    {% set t = trends.get('sleep_hours', {}) %}
+    <div class="card trend-card">
+      <div class="trend-label">Sleep</div>
+      <div class="trend-value-row">
+        <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+        <span class="trend-unit">{{ t.get('unit', 'hrs') }}</span>
+        {% if t.get('delta') is not none %}
+          <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+            {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+          </span>
+        {% endif %}
+      </div>
+      <div class="trend-sparkline">
+        <canvas id="spark-sleep"></canvas>
+      </div>
+    </div>
+
+    {% set t = trends.get('calories', {}) %}
+    <div class="card trend-card">
+      <div class="trend-label">Calories</div>
+      <div class="trend-value-row">
+        <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+        <span class="trend-unit">{{ t.get('unit', 'kcal') }}</span>
+        {% if t.get('delta') is not none %}
+          <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+            {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+          </span>
+        {% endif %}
+      </div>
+      <div class="trend-sparkline">
+        <canvas id="spark-cals"></canvas>
+      </div>
+    </div>
 
   </div>
+</section>
 
-  {# ── Trends Sidebar ──────────────────────────────────────────── #}
-  <aside class="home-sidebar">
-    <div class="section-header">
-      <h3 class="section-title">Your Trends</h3>
+{# ── This Week ────────────────────────────────────────────────── #}
+<section class="mt-section">
+  <div class="section-header">
+    <h3 class="section-title">This Week</h3>
+  </div>
+  <div class="charts-grid">
+    <div class="card chart-card">
+      <h4 class="chart-card-title">Avg Heart Rate</h4>
+      <div class="chart-wrap">
+        <canvas id="chart-weekly-hr"></canvas>
+      </div>
     </div>
-    <div class="trends-list">
-
-      {# HRV #}
-      {% set t = trends.get('hrv', {}) %}
-      <div class="card trend-card">
-        <div class="trend-label">Heart Rate Variability</div>
-        <div class="trend-value-row">
-          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
-          <span class="trend-unit">{{ t.get('unit', 'ms') }}</span>
-          {% if t.get('delta') is not none %}
-            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
-              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
-            </span>
-          {% endif %}
-        </div>
-        <div class="trend-sparkline">
-          <canvas id="spark-hrv"></canvas>
-        </div>
+    <div class="card chart-card">
+      <h4 class="chart-card-title">Time Asleep</h4>
+      <div class="chart-wrap">
+        <canvas id="chart-weekly-sleep"></canvas>
       </div>
-
-      {# Resting HR #}
-      {% set t = trends.get('resting_hr', {}) %}
-      <div class="card trend-card">
-        <div class="trend-label">Resting Heart Rate</div>
-        <div class="trend-value-row">
-          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
-          <span class="trend-unit">{{ t.get('unit', 'bpm') }}</span>
-          {% if t.get('delta') is not none %}
-            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) != t.higher_is_better else 'trend-delta-down' }}">
-              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
-            </span>
-          {% endif %}
-        </div>
-        <div class="trend-sparkline">
-          <canvas id="spark-rhr"></canvas>
-        </div>
-      </div>
-
-      {# Steps #}
-      {% set t = trends.get('steps', {}) %}
-      <div class="card trend-card">
-        <div class="trend-label">Steps</div>
-        <div class="trend-value-row">
-          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
-          {% if t.get('delta') is not none %}
-            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
-              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
-            </span>
-          {% endif %}
-        </div>
-        <div class="trend-sparkline">
-          <canvas id="spark-steps"></canvas>
-        </div>
-      </div>
-
-      {# Body Battery #}
-      {% set t = trends.get('body_battery', {}) %}
-      <div class="card trend-card">
-        <div class="trend-label">Body Battery</div>
-        <div class="trend-value-row">
-          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
-          {% if t.get('delta') is not none %}
-            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
-              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
-            </span>
-          {% endif %}
-        </div>
-        <div class="trend-sparkline">
-          <canvas id="spark-bb"></canvas>
-        </div>
-      </div>
-
-      {# Sleep Hours #}
-      {% set t = trends.get('sleep_hours', {}) %}
-      <div class="card trend-card">
-        <div class="trend-label">Sleep</div>
-        <div class="trend-value-row">
-          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
-          <span class="trend-unit">{{ t.get('unit', 'hrs') }}</span>
-          {% if t.get('delta') is not none %}
-            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
-              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
-            </span>
-          {% endif %}
-        </div>
-        <div class="trend-sparkline">
-          <canvas id="spark-sleep"></canvas>
-        </div>
-      </div>
-
-      {# Calories #}
-      {% set t = trends.get('calories', {}) %}
-      <div class="card trend-card">
-        <div class="trend-label">Calories</div>
-        <div class="trend-value-row">
-          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
-          <span class="trend-unit">{{ t.get('unit', 'kcal') }}</span>
-          {% if t.get('delta') is not none %}
-            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
-              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
-            </span>
-          {% endif %}
-        </div>
-        <div class="trend-sparkline">
-          <canvas id="spark-cals"></canvas>
-        </div>
-      </div>
-
     </div>
-  </aside>
+    <div class="card chart-card">
+      <h4 class="chart-card-title">Steps</h4>
+      <div class="chart-wrap">
+        <canvas id="chart-weekly-steps"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
 
-</div>
+{# ── Recent Activity ──────────────────────────────────────────── #}
+{% if recent_workouts %}
+<section class="mt-section">
+  <div class="section-header">
+    <h3 class="section-title">Recent Activity</h3>
+    <a href="/training" class="section-action">
+      See All
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </a>
+  </div>
+  <div class="workout-cards">
+    {% for w in recent_workouts %}
+    <div class="card workout-card">
+      <div class="workout-card-header">
+        <span class="workout-date">{{ w.date_str }}</span>
+        {% if w.duration %}
+          <span class="workout-duration">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            {{ w.duration }} min
+          </span>
+        {% endif %}
+      </div>
+      <div class="workout-muscles">
+        {% for m in w.muscle_groups %}
+          <span class="muscle-tag">{{ m }}</span>
+        {% endfor %}
+      </div>
+      <div class="workout-stats">
+        <div class="workout-stat">
+          <span class="workout-stat-value metric-value">{{ "{:,}".format(w.total_volume) }}</span>
+          <span class="workout-stat-label">lbs volume</span>
+        </div>
+        <div class="workout-stat">
+          <span class="workout-stat-value metric-value">{{ w.set_count }}</span>
+          <span class="workout-stat-label">sets</span>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 {% endblock %}
 
