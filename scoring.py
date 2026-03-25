@@ -181,7 +181,7 @@ def compute_sleep_score(conn, target_date, baselines):
         WHERE date = %s
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (target_date))
+        cur.execute(sql, (target_date,))
         row = cur.fetchone()
 
     if row is None:
@@ -285,7 +285,7 @@ def compute_recovery_score(conn, target_date, baselines):
         WHERE date = %s
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (target_date))
+        cur.execute(sql, (target_date,))
         row = cur.fetchone()
 
     if row is None:
@@ -354,7 +354,7 @@ def compute_training_score(conn, target_date):
         SELECT acwr_volume FROM derived_daily WHERE date = %s
     """
     with conn.cursor() as cur:
-        cur.execute(sql_acwr, (target_date))
+        cur.execute(sql_acwr, (target_date,))
         row = cur.fetchone()
         if row and row.get("acwr_volume") is not None:
             acwr = _f(row["acwr_volume"])
@@ -373,7 +373,7 @@ def compute_training_score(conn, target_date):
         acute_start   = target_date - timedelta(days=6)
         chronic_start = target_date - timedelta(days=27)
         with conn.cursor() as cur:
-            cur.execute(sql_inline, (target_date, acute_start, chronic_start))
+            cur.execute(sql_inline, (acute_start, target_date, chronic_start, target_date))
             row = cur.fetchone()
         if row:
             acute_vol   = _f(row.get("acute_vol"))  or 0.0
@@ -413,7 +413,7 @@ def compute_training_score(conn, target_date):
     """
     vol_start = target_date - timedelta(days=28)
     with conn.cursor() as cur:
-        cur.execute(sql_vol, (target_date, vol_start))
+        cur.execute(sql_vol, (target_date, vol_start, target_date))
         row = cur.fetchone()
 
     today_vol   = _f(row.get("today_vol"))  if row else None
@@ -435,7 +435,7 @@ def compute_training_score(conn, target_date):
           AND hevy_session_count > 0
     """
     with conn.cursor() as cur:
-        cur.execute(sql_last, (target_date))
+        cur.execute(sql_last, (target_date,))
         row = cur.fetchone()
 
     days_since = None
@@ -567,7 +567,7 @@ def compute_nutrition_score(conn, target_date):
         WHERE date = %s
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (target_date))
+        cur.execute(sql, (target_date,))
         row = cur.fetchone()
 
     if row is None:
