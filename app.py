@@ -776,6 +776,264 @@ def recovery():
     )
 
 
+@app.route("/training")
+def training():
+    now = datetime.now(LOCAL_TZ)
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+
+    conn = get_db()
+    try:
+        # ── Training score ──────────────────────────────────────────
+        training_result = compute_training_score(conn, yesterday)
+        training_score = training_result.get("score") or 0
+
+        # ── Hero summary ────────────────────────────────────────────
+        hero_summary = None
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT content FROM insights WHERE date = %s AND type = 'training' LIMIT 1",
+                (today,),
+            )
+            row = cur.fetchone()
+            if row:
+                hero_summary = row["content"]
+
+        if not hero_summary:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT content FROM insights WHERE date = %s AND type = 'training' LIMIT 1",
+                    (yesterday,),
+                )
+                row = cur.fetchone()
+                if row:
+                    hero_summary = row["content"]
+
+        if not hero_summary:
+            hero_summary = generate_hero_summary(
+                "training", training_score, training_result.get("components", {}),
+            )
+
+        # ── Recent workouts (last 5 sessions) ──────────────────────
+        recent_workouts = []
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT date, session_id,
+                       ARRAY_AGG(DISTINCT exercise_name) AS exercises,
+                       ARRAY_AGG(DISTINCT muscle_group) AS muscles,
+                       SUM(weight_lbs * reps) AS volume,
+                       COUNT(*) AS total_sets,
+                       COUNT(DISTINCT exercise_name) AS exercise_count
+                FROM hevy_sets
+                WHERE date >= (current_date - interval '60 days')
+                GROUP BY date, session_id
+                ORDER BY date DESC LIMIT 5
+            """)
+            rows = cur.fetchall()
+            for r in rows:
+                # Get session duration from daily_log if available
+                duration = None
+                with conn.cursor() as cur2:
+                    cur2.execute(
+                        "SELECT hevy_session_duration_min FROM daily_log WHERE date = %s",
+                        (r["date"],),
+                    )
+                    dl = cur2.fetchone()
+                    if dl and dl.get("hevy_session_duration_min"):
+                        duration = int(dl["hevy_session_duration_min"])
+
+                muscles = r.get("muscles") or []
+                muscles = [m for m in muscles if m]
+                exercises = r.get("exercises") or []
+                exercises = [e for e in exercises if e]
+
+                recent_workouts.append({
+                    "date": r["date"],
+                    "date_str": r["date"].strftime("%b %-d"),
+                    "exercises": exercises,
+                    "muscle_groups": muscles,
+                    "volume": round(float(r.get("volume") or 0)),
+                    "total_sets": r.get("total_sets") or 0,
+                    "exercise_count": r.get("exercise_count") or 0,
+                    "duration": duration,
+                })
+
+        # ── Volume trend (30 days + 28-day MA) ──────────────────────
+        vol_labels = []
+        vol_data = []
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT date, hevy_total_volume_lbs
+                FROM daily_log
+                WHERE date >= %s AND date <= %s
+                ORDER BY date ASC
+            """, (today - timedelta(days=29), today))
+            vol_rows = cur.fetchall()
+
+        vol_by_date = {}
+        for r in vol_rows:
+            vol_by_date[r["date"]] = float(r["hevy_total_volume_lbs"]) if r.get("hevy_total_volume_lbs") else 0
+
+        # Also fetch 28 days before the 30-day window for moving average
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT date, hevy_total_volume_lbs
+                FROM daily_log
+                WHERE date >= %s AND date <= %s
+                ORDER BY date ASC
+            """, (today - timedelta(days=57), today))
+            ma_rows = cur.fetchall()
+
+        ma_by_date = {}
+        for r in ma_rows:
+            ma_by_date[r["date"]] = float(r["hevy_total_volume_lbs"]) if r.get("hevy_total_volume_lbs") else 0
+
+        vol_ma_data = []
+        for i in range(30):
+            d = today - timedelta(days=29 - i)
+            vol_labels.append(d.strftime("%-m/%-d"))
+            vol_data.append(vol_by_date.get(d, 0))
+
+            # 28-day moving average
+            ma_vals = []
+            for j in range(28):
+                md = d - timedelta(days=j)
+                v = ma_by_date.get(md, 0)
+                ma_vals.append(v)
+            vol_ma_data.append(round(sum(ma_vals) / len(ma_vals)) if ma_vals else 0)
+
+        # ── ACWR (30 days) ──────────────────────────────────────────
+        # Need ~58 days of lookback for 28-day chronic window
+        acwr_labels = []
+        acwr_data = []
+        for i in range(30):
+            d = today - timedelta(days=29 - i)
+            acwr_labels.append(d.strftime("%-m/%-d"))
+
+            # 7-day acute load
+            acute_vals = []
+            for j in range(7):
+                ad = d - timedelta(days=j)
+                acute_vals.append(ma_by_date.get(ad, 0))
+            acute_avg = sum(acute_vals) / 7.0
+
+            # 28-day chronic load
+            chronic_vals = []
+            for j in range(28):
+                cd = d - timedelta(days=j)
+                chronic_vals.append(ma_by_date.get(cd, 0))
+            chronic_avg = sum(chronic_vals) / 28.0
+
+            if chronic_avg > 0:
+                acwr_data.append(round(acute_avg / chronic_avg, 2))
+            else:
+                acwr_data.append(None)
+
+        # Current ACWR value and zone label
+        current_acwr = acwr_data[-1] if acwr_data else None
+        acwr_zone = "Unknown"
+        acwr_zone_color = "muted"
+        if current_acwr is not None:
+            if current_acwr < 0.8:
+                acwr_zone = "Detraining"
+                acwr_zone_color = "blue"
+            elif current_acwr <= 1.3:
+                acwr_zone = "Optimal"
+                acwr_zone_color = "green"
+            elif current_acwr <= 1.7:
+                acwr_zone = "Overreach"
+                acwr_zone_color = "yellow"
+            else:
+                acwr_zone = "Injury Risk"
+                acwr_zone_color = "red"
+
+        # ── Volume by muscle group (30 days) ────────────────────────
+        muscle_vol = {}  # {muscle_group: {date_str: volume}}
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT date, muscle_group, SUM(weight_lbs * reps) AS volume
+                FROM hevy_sets
+                WHERE date >= %s AND muscle_group IS NOT NULL
+                GROUP BY date, muscle_group
+                ORDER BY date ASC
+            """, (today - timedelta(days=29),))
+            mg_rows = cur.fetchall()
+
+        all_muscles = set()
+        mg_by_date = {}  # {date: {muscle: vol}}
+        for r in mg_rows:
+            d = r["date"]
+            mg = r["muscle_group"]
+            vol = float(r.get("volume") or 0)
+            all_muscles.add(mg)
+            if d not in mg_by_date:
+                mg_by_date[d] = {}
+            mg_by_date[d][mg] = vol
+
+        # Sort muscles for consistent ordering
+        all_muscles = sorted(all_muscles)
+
+        mg_labels = []
+        mg_datasets = {m: [] for m in all_muscles}
+        for i in range(30):
+            d = today - timedelta(days=29 - i)
+            mg_labels.append(d.strftime("%-m/%-d"))
+            day_data = mg_by_date.get(d, {})
+            for m in all_muscles:
+                mg_datasets[m].append(day_data.get(m, 0))
+
+        # ── Personal records (top 15 by max weight) ─────────────────
+        personal_records = []
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT DISTINCT ON (exercise_name) exercise_name, weight_lbs, reps, date
+                FROM hevy_sets
+                WHERE weight_lbs IS NOT NULL
+                ORDER BY exercise_name, weight_lbs DESC
+            """)
+            pr_rows = cur.fetchall()
+
+        # Sort by weight descending and take top 15
+        pr_rows = sorted(pr_rows, key=lambda r: float(r.get("weight_lbs") or 0), reverse=True)[:15]
+        for r in pr_rows:
+            personal_records.append({
+                "exercise": r["exercise_name"],
+                "weight": float(r["weight_lbs"]),
+                "reps": int(r["reps"]) if r.get("reps") else 0,
+                "date": r["date"].strftime("%b %-d, %Y"),
+            })
+
+    finally:
+        conn.close()
+
+    # Gruvbox accent colors for muscle groups
+    mg_colors = [
+        '#a9b665', '#7daea3', '#d8a657', '#ea6962', '#d3869b',
+        '#89b482', '#e78a4e', '#ddc7a1', '#b0b846', '#fabd2f',
+    ]
+
+    return render_template(
+        "training.html",
+        active_page="training",
+        training_score=training_score,
+        hero_summary=hero_summary,
+        recent_workouts=recent_workouts,
+        vol_labels=vol_labels,
+        vol_data=vol_data,
+        vol_ma_data=vol_ma_data,
+        acwr_labels=acwr_labels,
+        acwr_data=acwr_data,
+        current_acwr=current_acwr,
+        acwr_zone=acwr_zone,
+        acwr_zone_color=acwr_zone_color,
+        mg_labels=mg_labels,
+        all_muscles=all_muscles,
+        mg_datasets=mg_datasets,
+        mg_colors=mg_colors,
+        personal_records=personal_records,
+    )
+
+
 @app.route("/sleep")
 def sleep():
     now = datetime.now(LOCAL_TZ)
