@@ -128,12 +128,12 @@ def fetch_baselines(conn, target_date):
                 ORDER BY EXTRACT(EPOCH FROM (sleep_start AT TIME ZONE 'America/Chicago'))::BIGINT % 86400
             ) AS median_sleep_start_sec
         FROM daily_log
-        WHERE date >= %(start)s
-          AND date < %(target)s
+        WHERE date >= %s
+          AND date < %s
     """
     start_date = target_date - timedelta(days=90)
     with conn.cursor() as cur:
-        cur.execute(sql, {"start": start_date, "target": target_date})
+        cur.execute(sql, (start_date, target_date))
         row = cur.fetchone()
 
     if row is None:
@@ -178,10 +178,10 @@ def compute_sleep_score(conn, target_date, baselines):
             sleep_start,
             sleep_end
         FROM daily_log
-        WHERE date = %(date)s
+        WHERE date = %s
     """
     with conn.cursor() as cur:
-        cur.execute(sql, {"date": target_date})
+        cur.execute(sql, (target_date))
         row = cur.fetchone()
 
     if row is None:
@@ -282,10 +282,10 @@ def compute_recovery_score(conn, target_date, baselines):
             body_battery_eod,
             sleep_deep_sec
         FROM daily_log
-        WHERE date = %(date)s
+        WHERE date = %s
     """
     with conn.cursor() as cur:
-        cur.execute(sql, {"date": target_date})
+        cur.execute(sql, (target_date))
         row = cur.fetchone()
 
     if row is None:
@@ -351,10 +351,10 @@ def compute_training_score(conn, target_date):
     # --- ACWR: try derived_daily first, then compute inline ---
     acwr = None
     sql_acwr = """
-        SELECT acwr_volume FROM derived_daily WHERE date = %(date)s
+        SELECT acwr_volume FROM derived_daily WHERE date = %s
     """
     with conn.cursor() as cur:
-        cur.execute(sql_acwr, {"date": target_date})
+        cur.execute(sql_acwr, (target_date))
         row = cur.fetchone()
         if row and row.get("acwr_volume") is not None:
             acwr = _f(row["acwr_volume"])
@@ -365,19 +365,15 @@ def compute_training_score(conn, target_date):
             SELECT
                 (SELECT COALESCE(SUM(hevy_total_volume_lbs), 0)
                  FROM daily_log
-                 WHERE date >= %(acute_start)s AND date <= %(target)s) AS acute_vol,
+                 WHERE date >= %s AND date <= %s) AS acute_vol,
                 (SELECT COALESCE(SUM(hevy_total_volume_lbs), 0)
                  FROM daily_log
-                 WHERE date >= %(chronic_start)s AND date <= %(target)s) AS chronic_vol
+                 WHERE date >= %s AND date <= %s) AS chronic_vol
         """
         acute_start   = target_date - timedelta(days=6)
         chronic_start = target_date - timedelta(days=27)
         with conn.cursor() as cur:
-            cur.execute(sql_inline, {
-                "target":        target_date,
-                "acute_start":   acute_start,
-                "chronic_start": chronic_start,
-            })
+            cur.execute(sql_inline, (target_date, acute_start, chronic_start))
             row = cur.fetchone()
         if row:
             acute_vol   = _f(row.get("acute_vol"))  or 0.0
@@ -408,16 +404,16 @@ def compute_training_score(conn, target_date):
     # --- Volume trend: today's volume vs 28-day average ---
     sql_vol = """
         SELECT
-            (SELECT hevy_total_volume_lbs FROM daily_log WHERE date = %(target)s) AS today_vol,
+            (SELECT hevy_total_volume_lbs FROM daily_log WHERE date = %s) AS today_vol,
             (SELECT AVG(hevy_total_volume_lbs)
              FROM daily_log
-             WHERE date >= %(vol_start)s AND date < %(target)s
+             WHERE date >= %s AND date < %s
                AND hevy_total_volume_lbs IS NOT NULL
                AND hevy_session_count > 0) AS avg_vol_28d
     """
     vol_start = target_date - timedelta(days=28)
     with conn.cursor() as cur:
-        cur.execute(sql_vol, {"target": target_date, "vol_start": vol_start})
+        cur.execute(sql_vol, (target_date, vol_start))
         row = cur.fetchone()
 
     today_vol   = _f(row.get("today_vol"))  if row else None
@@ -435,11 +431,11 @@ def compute_training_score(conn, target_date):
     sql_last = """
         SELECT MAX(date) AS last_session_date
         FROM daily_log
-        WHERE date < %(target)s
+        WHERE date < %s
           AND hevy_session_count > 0
     """
     with conn.cursor() as cur:
-        cur.execute(sql_last, {"target": target_date})
+        cur.execute(sql_last, (target_date))
         row = cur.fetchone()
 
     days_since = None
@@ -468,13 +464,13 @@ def compute_training_score(conn, target_date):
     sql_muscles = """
         SELECT hevy_muscle_groups
         FROM daily_log
-        WHERE date >= %(muscle_start)s
-          AND date <= %(target)s
+        WHERE date >= %s
+          AND date <= %s
           AND hevy_muscle_groups IS NOT NULL
     """
     muscle_start = target_date - timedelta(days=6)
     with conn.cursor() as cur:
-        cur.execute(sql_muscles, {"target": target_date, "muscle_start": muscle_start})
+        cur.execute(sql_muscles, (target_date, muscle_start))
         rows = cur.fetchall()
 
     unique_groups = set()
@@ -568,10 +564,10 @@ def compute_nutrition_score(conn, target_date):
             crono_fiber_g,
             crono_sodium_mg
         FROM daily_log
-        WHERE date = %(date)s
+        WHERE date = %s
     """
     with conn.cursor() as cur:
-        cur.execute(sql, {"date": target_date})
+        cur.execute(sql, (target_date))
         row = cur.fetchone()
 
     if row is None:
