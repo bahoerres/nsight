@@ -68,6 +68,11 @@ def manifest():
     return send_from_directory("static", "manifest.json", mimetype="application/json")
 
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory('static/icons', 'icon-192.png', mimetype='image/png')
+
+
 # ── Pages ───────────────────────────────────────────────────────────
 
 @app.route("/")

@@ -336,11 +336,13 @@ h4 { font-size: 1rem; }
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
   padding: var(--card-pad);
-  transition: border-color 0.2s ease;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .card:hover {
   border-color: var(--border);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 }
 
 /* ── Trend Card ─────────────────────────────────────────────────── */
@@ -582,11 +584,11 @@ h4 { font-size: 1rem; }
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-root); }
 ::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
