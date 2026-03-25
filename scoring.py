@@ -125,7 +125,7 @@ def fetch_baselines(conn, target_date):
             AVG(respiration_avg)            AS respiration_avg_val,
             STDDEV(respiration_avg)         AS respiration_std,
             PERCENTILE_CONT(0.5) WITHIN GROUP (
-                ORDER BY EXTRACT(EPOCH FROM (sleep_start AT TIME ZONE 'America/Chicago'))::BIGINT % 86400
+                ORDER BY EXTRACT(EPOCH FROM (sleep_start AT TIME ZONE 'America/Chicago'))::BIGINT %% 86400
             ) AS median_sleep_start_sec
         FROM daily_log
         WHERE date >= %s
