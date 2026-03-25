@@ -19,6 +19,7 @@ from scoring import (
     compute_nutrition_score,
     compute_overall_score,
     generate_hero_summary,
+    _metric_status,
 )
 
 load_dotenv()
@@ -309,6 +310,231 @@ def home():
         weekly_sleep=weekly_sleep,
         weekly_steps=weekly_steps,
         trends=trends,
+    )
+
+
+@app.route("/health")
+def health():
+    now = datetime.now(LOCAL_TZ)
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+    week_start = today - timedelta(days=6)
+
+    conn = get_db()
+    try:
+        # ── Baselines ──────────────────────────────────────────────
+        baselines = fetch_baselines(conn, today)
+
+        # ── Scores ─────────────────────────────────────────────────
+        sleep_result     = compute_sleep_score(conn, today, baselines)
+        recovery_result  = compute_recovery_score(conn, today, baselines)
+        training_result  = compute_training_score(conn, yesterday)
+        nutrition_result = compute_nutrition_score(conn, yesterday)
+
+        sleep_score     = sleep_result.get("score")
+        recovery_score  = recovery_result.get("score")
+        training_score  = training_result.get("score")
+        nutrition_score = nutrition_result.get("score")
+
+        overall_score = compute_overall_score(
+            sleep_result, recovery_result, training_result, nutrition_result
+        )
+
+        # ── Daily insight (hero text) ─────────────────────────────
+        daily_summary = None
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT content FROM insights WHERE date = %s AND type = 'daily' LIMIT 1",
+                (today,),
+            )
+            row = cur.fetchone()
+            if row:
+                daily_summary = row["content"]
+
+        if not daily_summary:
+            # Try yesterday
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT content FROM insights WHERE date = %s AND type = 'daily' LIMIT 1",
+                    (yesterday,),
+                )
+                row = cur.fetchone()
+                if row:
+                    daily_summary = row["content"]
+
+        if not daily_summary:
+            daily_summary = generate_hero_summary(
+                "overall",
+                overall_score,
+                {
+                    "sleep_score": sleep_score,
+                    "recovery_score": recovery_score,
+                    "training_score": training_score,
+                    "nutrition_score": nutrition_score,
+                },
+            )
+
+        # ── Insight chips (most recent 2 daily insights) ──────────
+        insight_chips = []
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT content FROM insights
+                WHERE type = 'daily'
+                ORDER BY date DESC
+                LIMIT 2
+            """)
+            for row in cur.fetchall():
+                content = row["content"] or ""
+                # First sentence only
+                first_sentence = content.split(". ")[0]
+                if first_sentence and not first_sentence.endswith("."):
+                    first_sentence += "."
+                insight_chips.append(first_sentence)
+
+        # ── Vital Trends (7-day sparkline + current + 90d avg + status) ──
+        vital_metrics = [
+            ("hrv",       "hrv_nightly_avg", "Heart Rate Variability", "ms",   True,  "hrv_avg",         "hrv_std"),
+            ("spo2",      "spo2_avg",        "SpO2",                   "%",    True,  "spo2_avg_val",    "spo2_std"),
+            ("rhr",       "resting_hr",      "Resting Heart Rate",     "bpm",  False, "resting_hr_avg",  "resting_hr_std"),
+            ("resp",      "respiration_avg", "Respiratory Rate",       "brpm", False, "respiration_avg_val", "respiration_std"),
+            ("steps",     "steps",           "Steps",                  "",     True,  "steps_avg",       "steps_std"),
+        ]
+
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT date, hrv_nightly_avg, spo2_avg, resting_hr,
+                       respiration_avg, steps
+                FROM daily_log
+                WHERE date >= %s AND date <= %s
+                ORDER BY date ASC
+            """, (week_start, today))
+            trend_rows = cur.fetchall()
+
+        trend_data = {}
+        for r in trend_rows:
+            trend_data[r["date"]] = r
+
+        vitals = []
+        for key, col, label, unit, higher_is_better, baseline_key, std_key in vital_metrics:
+            sparkline = []
+            current = None
+            for i in range(7):
+                d = week_start + timedelta(days=i)
+                row = trend_data.get(d)
+                val = None
+                if row and row.get(col) is not None:
+                    val = float(row[col])
+                sparkline.append(val if val is not None else 0)
+                if d == today or (d == yesterday and current is None):
+                    if val is not None and val != 0:
+                        current = val
+
+            baseline_val = baselines.get(baseline_key)
+            std_val = baselines.get(std_key)
+
+            # 90-day average formatted
+            avg_display = None
+            if baseline_val is not None:
+                if key == "steps":
+                    avg_display = f"{int(baseline_val):,}"
+                elif key in ("hrv", "rhr"):
+                    avg_display = f"{baseline_val:.0f}"
+                elif key == "spo2":
+                    avg_display = f"{baseline_val:.1f}"
+                elif key == "resp":
+                    avg_display = f"{baseline_val:.1f}"
+                else:
+                    avg_display = f"{baseline_val:.1f}"
+
+            # Status pill via _metric_status
+            status_text, status_color = _metric_status(current, baseline_val, std_val, higher_is_better)
+            # Map status text to CSS pill classes (pill-normal, pill-above, pill-below)
+            pill_class = "normal"
+            if status_text == "Above":
+                pill_class = "above"
+            elif status_text == "Below":
+                pill_class = "below"
+            elif status_text == "No data":
+                pill_class = "below"
+
+            # Format current value
+            if current is not None:
+                if key == "steps":
+                    display_val = f"{int(current):,}"
+                elif key in ("hrv", "rhr"):
+                    display_val = f"{current:.0f}"
+                elif key == "spo2":
+                    display_val = f"{current:.1f}"
+                elif key == "resp":
+                    display_val = f"{current:.1f}"
+                else:
+                    display_val = f"{current:.1f}"
+            else:
+                display_val = "--"
+
+            vitals.append({
+                "id": key,
+                "label": label,
+                "value": display_val,
+                "unit": unit,
+                "sparkline": sparkline,
+                "avg": avg_display,
+                "status": status_text,
+                "status_color": pill_class,
+            })
+
+        # ── Weekly Progress (avg score over last 7 days) ──────────
+        weekly_scores = {"sleep": [], "training": [], "nutrition": []}
+        for i in range(7):
+            d = today - timedelta(days=i)
+            d_baselines = baselines  # re-use 90d baselines (close enough)
+            s = compute_sleep_score(conn, d, d_baselines)
+            if s.get("score") is not None:
+                weekly_scores["sleep"].append(s["score"])
+            t = compute_training_score(conn, d)
+            if t.get("score") is not None:
+                weekly_scores["training"].append(t["score"])
+            n = compute_nutrition_score(conn, d)
+            if n.get("score") is not None:
+                weekly_scores["nutrition"].append(n["score"])
+
+        def _avg(lst):
+            return round(sum(lst) / len(lst)) if lst else None
+
+        weekly_progress = [
+            {
+                "label": "Fitness",
+                "score": _avg(weekly_scores["training"]),
+                "summary": generate_hero_summary("training", _avg(weekly_scores["training"]), {}),
+            },
+            {
+                "label": "Sleep",
+                "score": _avg(weekly_scores["sleep"]),
+                "summary": generate_hero_summary("sleep", _avg(weekly_scores["sleep"]), {}),
+            },
+            {
+                "label": "Nutrition",
+                "score": _avg(weekly_scores["nutrition"]),
+                "summary": generate_hero_summary("nutrition", _avg(weekly_scores["nutrition"]), {}),
+            },
+        ]
+
+    finally:
+        conn.close()
+
+    return render_template(
+        "health.html",
+        active_page="health",
+        today_label=now.strftime("%b %-d"),
+        daily_summary=daily_summary,
+        overall_score=overall_score or 0,
+        sleep_score=sleep_score or 0,
+        recovery_score=recovery_score or 0,
+        training_score=training_score or 0,
+        nutrition_score=nutrition_score or 0,
+        insight_chips=insight_chips,
+        vitals=vitals,
+        weekly_progress=weekly_progress,
     )
 
 
