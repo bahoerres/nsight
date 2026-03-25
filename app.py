@@ -18,6 +18,7 @@ from scoring import (
     compute_training_score,
     compute_nutrition_score,
     compute_overall_score,
+    classify_30_days,
     generate_hero_summary,
     _metric_status,
 )
@@ -535,6 +536,292 @@ def health():
         insight_chips=insight_chips,
         vitals=vitals,
         weekly_progress=weekly_progress,
+    )
+
+
+@app.route("/sleep")
+def sleep():
+    now = datetime.now(LOCAL_TZ)
+    today = now.date()
+    week_start = today - timedelta(days=6)
+
+    conn = get_db()
+    try:
+        # ── Baselines ──────────────────────────────────────────────
+        baselines = fetch_baselines(conn, today)
+
+        # ── Sleep score ────────────────────────────────────────────
+        sleep_result = compute_sleep_score(conn, today, baselines)
+        sleep_score = sleep_result.get("score") or 0
+
+        # ── Hero summary ───────────────────────────────────────────
+        hero_summary = None
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT content FROM insights WHERE date = %s AND type = 'sleep' LIMIT 1",
+                (today,),
+            )
+            row = cur.fetchone()
+            if row:
+                hero_summary = row["content"]
+
+        if not hero_summary:
+            hero_summary = generate_hero_summary(
+                "sleep", sleep_score, sleep_result.get("components", {}),
+            )
+
+        # ── Last night's sleep stages ──────────────────────────────
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT sleep_total_sec, sleep_deep_sec, sleep_light_sec,
+                       sleep_rem_sec, sleep_awake_sec, sleep_start, sleep_end,
+                       hrv_nightly_avg, respiration_avg, resting_hr
+                FROM daily_log
+                WHERE date = %s
+            """, (today,))
+            today_row = cur.fetchone()
+
+        stages = []
+        stage_total_sec = 0
+        sleep_start_time = None
+        sleep_end_time = None
+        today_hrv = None
+        today_resp = None
+        today_rhr = None
+
+        if today_row:
+            deep_sec = float(today_row["sleep_deep_sec"] or 0)
+            light_sec = float(today_row["sleep_light_sec"] or 0)
+            rem_sec = float(today_row["sleep_rem_sec"] or 0)
+            awake_sec = float(today_row["sleep_awake_sec"] or 0)
+            total_sec = float(today_row["sleep_total_sec"] or 0)
+            stage_total_sec = deep_sec + light_sec + rem_sec + awake_sec
+
+            today_hrv = float(today_row["hrv_nightly_avg"]) if today_row.get("hrv_nightly_avg") else None
+            today_resp = float(today_row["respiration_avg"]) if today_row.get("respiration_avg") else None
+            today_rhr = float(today_row["resting_hr"]) if today_row.get("resting_hr") else None
+
+            if today_row.get("sleep_start"):
+                sleep_start_time = today_row["sleep_start"].astimezone(LOCAL_TZ).strftime("%-I:%M %p")
+            if today_row.get("sleep_end"):
+                sleep_end_time = today_row["sleep_end"].astimezone(LOCAL_TZ).strftime("%-I:%M %p")
+
+            for label, sec, color in [
+                ("Deep Sleep", deep_sec, "#7daea3"),
+                ("REM Sleep", rem_sec, "#d3869b"),
+                ("Light Sleep", light_sec, "#d8a657"),
+                ("Awake", awake_sec, "#ea6962"),
+            ]:
+                hrs = int(sec // 3600)
+                mins = int((sec % 3600) // 60)
+                pct = round((sec / stage_total_sec) * 100, 1) if stage_total_sec > 0 else 0
+                stages.append({
+                    "label": label,
+                    "hours": hrs,
+                    "minutes": mins,
+                    "pct": pct,
+                    "color": color,
+                })
+
+        # ── 30-day sleep performance (line chart + donut) ──────────
+        perf_labels = []
+        perf_scores = []
+        for i in range(29, -1, -1):
+            d = today - timedelta(days=i)
+            perf_labels.append(d.strftime("%-m/%-d"))
+            try:
+                bl = fetch_baselines(conn, d)
+                result = compute_sleep_score(conn, d, bl)
+                s = result.get("score")
+                perf_scores.append(s if s is not None else None)
+            except Exception:
+                perf_scores.append(None)
+
+        donut_counts = classify_30_days(conn, today, "sleep")
+
+        # ── 12 Trend cards (7-day sparklines + 90d avg + status) ───
+        trend_metrics = [
+            ("total_sleep",    "sleep_total_sec",   "Total Sleep",      "hrs",  True,  "sleep_total_avg",        "sleep_total_std",        "sec_to_hrs"),
+            ("deep_sleep",     "sleep_deep_sec",    "Deep Sleep",       "hrs",  True,  "sleep_deep_avg",         "sleep_deep_std",         "sec_to_hrs"),
+            ("rem_sleep",      "sleep_rem_sec",     "REM Sleep",        "hrs",  True,  None,                     None,                     "sec_to_hrs"),
+            ("sleep_score",    None,                "Sleep Score",      "",     True,  None,                     None,                     "score"),
+            ("time_in_bed",    None,                "Time in Bed",      "hrs",  True,  None,                     None,                     "tib"),
+            ("light_sleep",    "sleep_light_sec",   "Light Sleep",      "hrs",  False, None,                     None,                     "sec_to_hrs"),
+            ("efficiency",     None,                "Sleep Efficiency", "%",    True,  None,                     None,                     "eff"),
+            ("sleep_hrv",      "hrv_nightly_avg",   "Sleep HRV",        "ms",   True,  "hrv_avg",                "hrv_std",                "raw"),
+            ("resp_rate",      "respiration_avg",   "Respiratory Rate", "brpm", False, "respiration_avg_val",    "respiration_std",        "raw"),
+            ("resting_hr",     "resting_hr",        "Resting HR",       "bpm",  False, "resting_hr_avg",         "resting_hr_std",         "raw"),
+            ("sleep_start",    "sleep_start",       "Sleep Start",      "",     False, None,                     None,                     "time_start"),
+            ("sleep_end",      "sleep_end",         "Sleep End",        "",     False, None,                     None,                     "time_end"),
+        ]
+
+        # Fetch 7-day data for sparklines
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT date, sleep_total_sec, sleep_deep_sec, sleep_light_sec,
+                       sleep_rem_sec, sleep_awake_sec, sleep_start, sleep_end,
+                       hrv_nightly_avg, respiration_avg, resting_hr
+                FROM daily_log
+                WHERE date >= %s AND date <= %s
+                ORDER BY date ASC
+            """, (week_start, today))
+            spark_rows = cur.fetchall()
+
+        spark_data = {}
+        for r in spark_rows:
+            spark_data[r["date"]] = r
+
+        trends = []
+        for key, col, label, unit, higher_is_better, baseline_key, std_key, transform in trend_metrics:
+            sparkline = []
+            current = None
+
+            for i in range(7):
+                d = week_start + timedelta(days=i)
+                row = spark_data.get(d)
+                val = None
+
+                if transform == "score":
+                    # Compute sleep score for each day
+                    try:
+                        bl = fetch_baselines(conn, d)
+                        res = compute_sleep_score(conn, d, bl)
+                        val = float(res["score"]) if res.get("score") is not None else None
+                    except Exception:
+                        val = None
+                elif transform == "tib":
+                    # Time in bed = total + awake
+                    if row and row.get("sleep_total_sec") is not None and row.get("sleep_awake_sec") is not None:
+                        val = (float(row["sleep_total_sec"]) + float(row["sleep_awake_sec"])) / 3600.0
+                elif transform == "eff":
+                    # Efficiency = (total - awake) / total * 100
+                    if row and row.get("sleep_total_sec") and row.get("sleep_awake_sec") is not None:
+                        t = float(row["sleep_total_sec"])
+                        a = float(row["sleep_awake_sec"])
+                        if t > 0:
+                            val = ((t - a) / t) * 100
+                elif transform == "sec_to_hrs":
+                    if row and row.get(col) is not None:
+                        val = float(row[col]) / 3600.0
+                elif transform == "time_start":
+                    if row and row.get("sleep_start"):
+                        local_t = row["sleep_start"].astimezone(LOCAL_TZ)
+                        # Convert to fractional hours for sparkline (normalize around midnight)
+                        h = local_t.hour + local_t.minute / 60.0
+                        if h > 12:
+                            val = h - 24  # e.g. 22:30 = -1.5
+                        else:
+                            val = h
+                elif transform == "time_end":
+                    if row and row.get("sleep_end"):
+                        local_t = row["sleep_end"].astimezone(LOCAL_TZ)
+                        val = local_t.hour + local_t.minute / 60.0
+                elif transform == "raw":
+                    if row and row.get(col) is not None:
+                        val = float(row[col])
+
+                sparkline.append(val if val is not None else 0)
+                if d == today or (d == (today - timedelta(days=1)) and current is None):
+                    if val is not None and val != 0:
+                        current = val
+
+            # 90d avg
+            baseline_val = baselines.get(baseline_key) if baseline_key else None
+            std_val = baselines.get(std_key) if std_key else None
+
+            # Convert baseline for sec_to_hrs metrics
+            if transform == "sec_to_hrs" and baseline_val is not None:
+                baseline_val_display = baseline_val / 3600.0
+            elif transform == "raw":
+                baseline_val_display = baseline_val
+            else:
+                baseline_val_display = baseline_val
+
+            # Format avg display
+            avg_display = None
+            if baseline_val_display is not None:
+                if transform == "sec_to_hrs":
+                    avg_display = f"{baseline_val_display:.1f}"
+                elif key in ("sleep_hrv", "resting_hr"):
+                    avg_display = f"{baseline_val_display:.0f}"
+                elif key == "resp_rate":
+                    avg_display = f"{baseline_val_display:.1f}"
+                else:
+                    avg_display = f"{baseline_val_display:.1f}"
+
+            # Status pill
+            # For sec_to_hrs, compare in original units
+            current_for_status = current
+            baseline_for_status = baselines.get(baseline_key) if baseline_key else None
+            std_for_status = baselines.get(std_key) if std_key else None
+
+            if transform == "sec_to_hrs" and current_for_status is not None:
+                current_for_status = current_for_status * 3600  # back to seconds
+            status_text, _ = _metric_status(current_for_status, baseline_for_status, std_for_status, higher_is_better)
+
+            pill_class = "normal"
+            if status_text == "Above":
+                pill_class = "above"
+            elif status_text == "Below":
+                pill_class = "below"
+            elif status_text == "No data":
+                pill_class = "below"
+
+            # Format current value for display
+            if current is not None:
+                if transform == "sec_to_hrs":
+                    display_val = f"{current:.1f}"
+                elif transform == "score":
+                    display_val = f"{current:.0f}"
+                elif transform == "eff":
+                    display_val = f"{current:.1f}"
+                elif transform == "tib":
+                    display_val = f"{current:.1f}"
+                elif transform == "time_start" or transform == "time_end":
+                    # Show actual time, not fractional hours
+                    if today_row:
+                        ts_col = "sleep_start" if transform == "time_start" else "sleep_end"
+                        if today_row.get(ts_col):
+                            display_val = today_row[ts_col].astimezone(LOCAL_TZ).strftime("%-I:%M %p")
+                        else:
+                            display_val = "--"
+                    else:
+                        display_val = "--"
+                elif key in ("sleep_hrv", "resting_hr"):
+                    display_val = f"{current:.0f}"
+                elif key == "resp_rate":
+                    display_val = f"{current:.1f}"
+                else:
+                    display_val = f"{current:.1f}"
+            else:
+                display_val = "--"
+
+            trends.append({
+                "id": key,
+                "label": label,
+                "value": display_val,
+                "unit": unit,
+                "sparkline": sparkline,
+                "avg": avg_display,
+                "status": status_text,
+                "status_color": pill_class,
+            })
+
+    finally:
+        conn.close()
+
+    return render_template(
+        "sleep.html",
+        active_page="sleep",
+        sleep_score=sleep_score,
+        hero_summary=hero_summary,
+        stages=stages,
+        perf_labels=perf_labels,
+        perf_scores=perf_scores,
+        donut_good=donut_counts["good"],
+        donut_fair=donut_counts["fair"],
+        donut_poor=donut_counts["poor"],
+        trends=trends,
     )
 
 
