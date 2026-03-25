@@ -1582,6 +1582,429 @@ def nutrition():
     )
 
 
+# ── Check-in helpers (ported from healthdash) ─────────────────────
+
+
+def local_today() -> date:
+    """Return today's date in the local timezone."""
+    return datetime.now(LOCAL_TZ).date()
+
+
+def delta_pct(current, baseline):
+    """Percentage delta from baseline. Returns None if either is None."""
+    if current is None or baseline is None or baseline == 0:
+        return None
+    return round(((float(current) - float(baseline)) / float(baseline)) * 100, 1)
+
+
+def suggest_score(metric: str, current, baseline) -> tuple[int, str]:
+    """
+    Returns (score 1-10, context string) calibrated to personal baseline.
+    8 = clean baseline, 7 = good with minor friction.
+    """
+    if current is None or baseline is None:
+        return 7, "no data"
+
+    pct = delta_pct(current, baseline)
+
+    # Metrics where higher = better
+    positive = metric in ("hrv", "sleep", "deep_sleep", "body_battery")
+
+    if positive:
+        if pct >= 10:
+            return 9, f"\u2191 {abs(pct)}% above baseline"
+        if pct >= 3:
+            return 8, "at baseline"
+        if pct >= -5:
+            return 7, f"slight dip ({abs(pct):.0f}%)"
+        if pct >= -15:
+            return 6, f"\u2193 {abs(pct):.0f}% below baseline"
+        if pct >= -25:
+            return 5, f"\u2193 {abs(pct):.0f}% below baseline"
+        return 4, f"\u2193 {abs(pct):.0f}% \u2014 meaningfully suppressed"
+    else:
+        # Metrics where lower = better (resting HR, stress)
+        if pct <= -10:
+            return 9, f"\u2193 {abs(pct)}% below baseline"
+        if pct <= -3:
+            return 8, "at baseline"
+        if pct <= 5:
+            return 7, f"slight elevation ({pct:.0f}%)"
+        if pct <= 15:
+            return 6, f"\u2191 {pct:.0f}% elevated"
+        if pct <= 25:
+            return 5, f"\u2191 {pct:.0f}% elevated"
+        return 4, f"\u2191 {pct:.0f}% \u2014 meaningfully elevated"
+
+
+def fetch_period_data(days: int = 14) -> dict:
+    """Fetch all metrics for the check-in period and baselines."""
+    conn = get_db()
+    cur = conn.cursor()
+
+    period_end = local_today() - timedelta(days=1)
+    period_start = period_end - timedelta(days=days - 1)
+
+    # ---- Period averages ----
+    cur.execute(
+        """
+        SELECT
+            ROUND(AVG(hrv_nightly_avg)::numeric, 1)         AS hrv_avg,
+            ROUND(AVG(resting_hr)::numeric, 1)              AS rhr_avg,
+            ROUND(AVG(sleep_total_sec / 3600.0)::numeric, 2) AS sleep_hrs_avg,
+            ROUND(AVG(sleep_deep_sec / 60.0)::numeric, 1)   AS deep_min_avg,
+            ROUND(AVG(body_battery_eod)::numeric, 1)        AS bb_eod_avg,
+            ROUND(AVG(body_battery_max)::numeric, 1)        AS bb_max_avg,
+            ROUND(AVG(stress_avg)::numeric, 1)              AS stress_avg,
+            ROUND(AVG(respiration_avg)::numeric, 1)         AS resp_avg,
+            ROUND(AVG(steps)::numeric, 0)                   AS steps_avg,
+            MAX(steps)                                       AS steps_max,
+            SUM(CASE WHEN steps > 15000 THEN 1 ELSE 0 END)  AS high_step_days,
+            ROUND(AVG(intensity_minutes)::numeric, 0)       AS intensity_avg,
+            (SELECT weight_lbs FROM kahunas_checkins
+             ORDER BY submitted_at DESC LIMIT 1)            AS last_weight,
+            ROUND(AVG(crono_calories)::numeric, 0)          AS cal_avg,
+            ROUND(AVG(crono_protein_g)::numeric, 0)         AS protein_avg,
+            COUNT(CASE WHEN crono_last_meal_time > '20:00:00' THEN 1 END) AS late_meals,
+            COUNT(crono_calories)                            AS crono_days_logged
+        FROM daily_log
+        WHERE date BETWEEN %s AND %s
+    """,
+        (period_start, period_end),
+    )
+    period = dict(cur.fetchone())
+
+    # ---- 90-day baselines ----
+    baseline_start = period_end - timedelta(days=90)
+    cur.execute(
+        """
+        SELECT
+            ROUND(AVG(hrv_nightly_avg)::numeric, 1)          AS hrv_baseline,
+            ROUND(AVG(resting_hr)::numeric, 1)               AS rhr_baseline,
+            ROUND(AVG(sleep_total_sec / 3600.0)::numeric, 2) AS sleep_baseline,
+            ROUND(AVG(sleep_deep_sec / 60.0)::numeric, 1)    AS deep_baseline,
+            ROUND(AVG(body_battery_eod)::numeric, 1)         AS bb_baseline,
+            ROUND(AVG(steps)::numeric, 0)                    AS steps_baseline
+        FROM daily_log
+        WHERE date BETWEEN %s AND %s
+          AND hrv_nightly_avg IS NOT NULL
+    """,
+        (baseline_start, period_end),
+    )
+    baseline = dict(cur.fetchone())
+
+    # ---- Training for period ----
+    cur.execute(
+        """
+        SELECT
+            COUNT(*)                                              AS session_count,
+            ROUND(SUM(hevy_total_volume_lbs)::numeric, 0)        AS total_volume,
+            ROUND(AVG(hevy_total_volume_lbs)::numeric, 0)        AS avg_volume,
+            (SELECT ROUND(SUM(hevy_total_volume_lbs)::numeric, 0)
+             FROM daily_log
+             WHERE date BETWEEN %s AND %s
+               AND hevy_session_count > 0)                       AS prior_volume,
+            (SELECT COUNT(*) FROM daily_log
+             WHERE date BETWEEN %s AND %s
+               AND hevy_session_count > 0)                       AS prior_sessions
+        FROM daily_log
+        WHERE date BETWEEN %s AND %s
+          AND hevy_session_count > 0
+    """,
+        (
+            period_start - timedelta(days=days),
+            period_start - timedelta(days=1),
+            period_start - timedelta(days=days),
+            period_start - timedelta(days=1),
+            period_start,
+            period_end,
+        ),
+    )
+    training = dict(cur.fetchone())
+
+    # ---- ACWR ----
+    cur.execute(
+        """
+        SELECT
+            ROUND(
+                NULLIF(AVG(CASE WHEN date >= %s THEN hevy_total_volume_lbs END), 0) /
+                NULLIF(AVG(CASE WHEN date >= %s THEN hevy_total_volume_lbs END), 0)
+            ::numeric, 2) AS acwr
+        FROM daily_log
+        WHERE date BETWEEN %s AND %s
+    """,
+        (
+            period_end - timedelta(days=6),
+            period_end - timedelta(days=27),
+            period_end - timedelta(days=27),
+            period_end,
+        ),
+    )
+    acwr_row = cur.fetchone()
+    training["acwr"] = (
+        float(acwr_row["acwr"]) if acwr_row and acwr_row["acwr"] else None
+    )
+
+    conn.close()
+    return {
+        "period": period,
+        "baseline": baseline,
+        "training": training,
+        "period_start": period_start,
+        "period_end": period_end,
+        "days": days,
+    }
+
+
+def build_scores(data: dict) -> dict:
+    p = data["period"]
+    b = data["baseline"]
+
+    sleep_score, sleep_ctx = suggest_score(
+        "sleep", p["sleep_hrs_avg"], b["sleep_baseline"]
+    )
+    deep_score, deep_ctx = suggest_score(
+        "deep_sleep", p["deep_min_avg"], b["deep_baseline"]
+    )
+    hrv_score, hrv_ctx = suggest_score("hrv", p["hrv_avg"], b["hrv_baseline"])
+    rhr_score, rhr_ctx = suggest_score("rhr", p["rhr_avg"], b["rhr_baseline"])
+    bb_score, bb_ctx = suggest_score("body_battery", p["bb_eod_avg"], b["bb_baseline"])
+    stress_score, stress_ctx = suggest_score("stress", p["stress_avg"], 50)
+
+    recovery_score = round(
+        (hrv_score * 0.4) + (deep_score * 0.35) + (rhr_score * 0.25)
+    )
+    recovery_ctx = f"HRV {hrv_ctx}, deep sleep {deep_ctx}"
+
+    energy_score = round((bb_score * 0.6) + (stress_score * 0.4))
+    energy_ctx = f"body battery {bb_ctx}"
+
+    t = data["training"]
+    if t["acwr"] and t["acwr"] > 1.3:
+        fatigue_score = max(4, recovery_score - 2)
+        fatigue_ctx = f"ACWR {t['acwr']} \u2014 above optimal range"
+    elif t["acwr"] and t["acwr"] < 0.8:
+        fatigue_score = min(9, recovery_score + 1)
+        fatigue_ctx = f"ACWR {t['acwr']} \u2014 deload territory"
+    else:
+        fatigue_score = recovery_score
+        fatigue_ctx = f"ACWR {t['acwr'] or 'n/a'} \u2014 within range"
+
+    return {
+        "sleep_quality": (sleep_score, sleep_ctx),
+        "recovery": (recovery_score, recovery_ctx),
+        "energy": (energy_score, energy_ctx),
+        "stress": (stress_score, stress_ctx),
+        "fatigue": (fatigue_score, fatigue_ctx),
+        "hunger": (7, "no signal \u2014 log more Cronometer data"),
+        "digestion": (7, "no signal"),
+    }
+
+
+def build_flags(data: dict, scores: dict) -> list[dict]:
+    """Generate period flags."""
+    flags = []
+    p = data["period"]
+    b = data["baseline"]
+    t = data["training"]
+
+    hrv_delta = delta_pct(p["hrv_avg"], b["hrv_baseline"])
+    if hrv_delta is not None:
+        if hrv_delta <= -15:
+            flags.append(
+                {
+                    "type": "warn",
+                    "text": f"HRV trending down \u2014 avg {p['hrv_avg']}, baseline {b['hrv_baseline']}",
+                }
+            )
+        elif hrv_delta >= 10:
+            flags.append(
+                {
+                    "type": "good",
+                    "text": f"HRV above baseline \u2014 avg {p['hrv_avg']} vs {b['hrv_baseline']}",
+                }
+            )
+
+    deep_delta = delta_pct(p["deep_min_avg"], b["deep_baseline"])
+    if deep_delta is not None and deep_delta <= -15:
+        flags.append(
+            {
+                "type": "warn",
+                "text": f"Deep sleep below baseline \u2014 {p['deep_min_avg']} min avg vs {b['deep_baseline']} min",
+            }
+        )
+
+    if t["prior_volume"] and t["total_volume"]:
+        vol_delta = delta_pct(t["total_volume"], t["prior_volume"])
+        if vol_delta is not None:
+            if vol_delta >= 10:
+                flags.append(
+                    {
+                        "type": "good",
+                        "text": f"Training volume up {vol_delta}% vs prior period",
+                    }
+                )
+            elif vol_delta <= -20:
+                flags.append(
+                    {
+                        "type": "info",
+                        "text": f"Training volume down {abs(vol_delta)}% vs prior period",
+                    }
+                )
+
+    if t["acwr"]:
+        if t["acwr"] > 1.3:
+            flags.append(
+                {
+                    "type": "warn",
+                    "text": f"ACWR {t['acwr']} \u2014 acute load above optimal range",
+                }
+            )
+        elif t["acwr"] < 0.8:
+            flags.append(
+                {"type": "info", "text": f"ACWR {t['acwr']} \u2014 deload territory"}
+            )
+        else:
+            flags.append(
+                {
+                    "type": "good",
+                    "text": f"ACWR {t['acwr']} \u2014 training load within optimal range",
+                }
+            )
+
+    if p["late_meals"] and p["late_meals"] > 3:
+        flags.append(
+            {
+                "type": "warn",
+                "text": f"Late meals (>8pm) on {p['late_meals']} of {data['days']} days",
+            }
+        )
+
+    if p["protein_avg"]:
+        target = 280
+        if p["protein_avg"] >= target * 0.95:
+            flags.append(
+                {
+                    "type": "good",
+                    "text": f"Protein on target \u2014 {p['protein_avg']}g avg vs {target}g goal",
+                }
+            )
+        else:
+            flags.append(
+                {
+                    "type": "info",
+                    "text": f"Protein averaged {p['protein_avg']}g \u2014 {target - int(p['protein_avg'])}g below target",
+                }
+            )
+
+    if p["high_step_days"] and p["high_step_days"] >= 4:
+        flags.append(
+            {
+                "type": "info",
+                "text": f"{p['high_step_days']} high step days (>15k) \u2014 significant floor load",
+            }
+        )
+
+    return flags
+
+
+def build_narrative(data: dict, scores: dict) -> str:
+    """Generate a draft narrative paragraph."""
+    p = data["period"]
+    b = data["baseline"]
+    t = data["training"]
+    lines = []
+
+    if p["hrv_avg"] and b["hrv_baseline"]:
+        delta = delta_pct(p["hrv_avg"], b["hrv_baseline"])
+        if delta is not None:
+            direction = "above" if delta > 0 else "below"
+            lines.append(
+                f"HRV averaged {p['hrv_avg']} this period vs my baseline of "
+                f"{b['hrv_baseline']} \u2014 {abs(delta):.0f}% {direction} baseline."
+            )
+
+    if p["deep_min_avg"] and p["late_meals"]:
+        lines.append(
+            f"Sleep deep average was {p['deep_min_avg']} min"
+            + (
+                f", with {p['late_meals']} late meals logged after 8pm."
+                if p["late_meals"]
+                else "."
+            )
+        )
+
+    if t["session_count"] and t["total_volume"]:
+        acwr_str = f" ACWR {t['acwr']}." if t["acwr"] else ""
+        lines.append(
+            f"Logged {t['session_count']} training sessions, "
+            f"{int(t['total_volume']):,} lbs total volume.{acwr_str}"
+        )
+
+    if p["last_weight"]:
+        lines.append(f"Current weight {p['last_weight']} lbs.")
+
+    if p["protein_avg"]:
+        lines.append(f"Protein averaged {p['protein_avg']}g against a 280g target.")
+
+    lines.append(
+        "Subjectively energy and fatigue feel consistent with what the data shows."
+    )
+
+    return " ".join(lines)
+
+
+# ── Check-in route ─────────────────────────────────────────────────
+
+@app.route("/checkin")
+@app.route("/checkin/<int:days>")
+def checkin(days: int = 14):
+    """Kahunas check-in prep view."""
+    data = fetch_period_data(days)
+    scores = build_scores(data)
+    flags = build_flags(data, scores)
+    narrative = build_narrative(data, scores)
+
+    # Most recent weekly insight
+    weekly_insight = None
+    body_weight = None
+    try:
+        conn2 = get_db()
+        cur2 = conn2.cursor()
+        cur2.execute(
+            "SELECT content FROM insights WHERE type = 'weekly' ORDER BY date DESC LIMIT 1"
+        )
+        wi_row = cur2.fetchone()
+        if wi_row:
+            weekly_insight = wi_row["content"]
+        cur2.execute(
+            "SELECT body_weight_lbs FROM daily_log WHERE body_weight_lbs IS NOT NULL ORDER BY date DESC LIMIT 1"
+        )
+        wt_row = cur2.fetchone()
+        if wt_row:
+            body_weight = float(wt_row["body_weight_lbs"])
+        conn2.close()
+    except Exception:
+        pass
+
+    return render_template(
+        "checkin.html",
+        active_page="checkin",
+        p=data["period"],
+        b=data["baseline"],
+        t=data["training"],
+        scores=scores,
+        flags=flags,
+        narrative=narrative,
+        period_start=data["period_start"],
+        period_end=data["period_end"],
+        days=days,
+        delta=delta_pct,
+        weekly_insight=weekly_insight,
+        body_weight=body_weight,
+    )
+
+
 # ── Run ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
