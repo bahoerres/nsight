@@ -1320,6 +1320,268 @@ def sleep():
     )
 
 
+@app.route("/nutrition")
+def nutrition():
+    now = datetime.now(LOCAL_TZ)
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+    week_start = today - timedelta(days=6)
+
+    conn = get_db()
+    try:
+        # ── Nutrition score (yesterday, since today may be incomplete) ─
+        nutrition_result = compute_nutrition_score(conn, yesterday)
+        nutrition_score = nutrition_result.get("score") or 0
+        targets = nutrition_result.get("targets", {})
+        components = nutrition_result.get("components", {})
+
+        high_carb_day = targets.get("high_carb_day", False)
+        cal_target = targets.get("calories", 2770)
+        carb_target = targets.get("carbs_g", 300)
+        protein_target = targets.get("protein_g", 280)
+
+        # Raw values from yesterday
+        cal_actual = components.get("calories_raw")
+        protein_actual = components.get("protein_raw")
+        carbs_actual = components.get("carbs_raw")
+
+        # ── Score pills ──────────────────────────────────────────────
+        # Calories pill
+        cal_delta = None
+        cal_status = "muted"
+        if cal_actual is not None:
+            cal_delta = int(cal_actual - cal_target)
+            pct_off = abs(cal_delta) / cal_target * 100
+            cal_status = "green" if pct_off <= 10 else ("amber" if pct_off <= 20 else "red")
+
+        # Protein pill
+        protein_delta = None
+        protein_status = "muted"
+        if protein_actual is not None:
+            protein_delta = int(protein_actual - protein_target)
+            pct_off = abs(protein_delta) / protein_target * 100
+            protein_status = "green" if pct_off <= 10 else ("amber" if pct_off <= 20 else "red")
+
+        # Carbs pill
+        carbs_delta = None
+        carbs_status = "muted"
+        if carbs_actual is not None:
+            carbs_delta = int(carbs_actual - carb_target)
+            pct_off = abs(carbs_delta) / carb_target * 100
+            carbs_status = "green" if pct_off <= 12 else ("amber" if pct_off <= 25 else "red")
+
+        pills = [
+            {
+                "label": "Calories",
+                "value": f"{int(cal_actual):,}" if cal_actual is not None else "--",
+                "unit": "kcal",
+                "delta": f"{cal_delta:+,}" if cal_delta is not None else "--",
+                "target_label": f"vs {int(cal_target):,}",
+                "status": cal_status,
+            },
+            {
+                "label": "Protein",
+                "value": f"{int(protein_actual)}" if protein_actual is not None else "--",
+                "unit": "g",
+                "delta": f"{protein_delta:+}" if protein_delta is not None else "--",
+                "target_label": f"vs {int(protein_target)}g",
+                "status": protein_status,
+            },
+            {
+                "label": "Carbs",
+                "value": f"{int(carbs_actual)}" if carbs_actual is not None else "--",
+                "unit": "g",
+                "delta": f"{carbs_delta:+}" if carbs_delta is not None else "--",
+                "target_label": f"vs {int(carb_target)}g" + (" (high)" if high_carb_day else ""),
+                "status": carbs_status,
+            },
+        ]
+
+        # ── Hero summary ─────────────────────────────────────────────
+        day_type = "high-carb day" if high_carb_day else "standard day"
+        hero_summary = generate_hero_summary(
+            "nutrition", nutrition_score, components,
+        )
+        # Prepend day type context
+        hero_summary = f"Today is a {day_type} (Tue/Wed = high-carb). {hero_summary}"
+
+        # ── 30-day performance (line chart + donut) ───────────────────
+        perf_labels = []
+        perf_scores = []
+        for i in range(29, -1, -1):
+            d = today - timedelta(days=i)
+            perf_labels.append(d.strftime("%-m/%-d"))
+            try:
+                result = compute_nutrition_score(conn, d)
+                s = result.get("score")
+                perf_scores.append(s if s is not None else None)
+            except Exception:
+                perf_scores.append(None)
+
+        donut_counts = classify_30_days(conn, today, "nutrition")
+
+        # ── 7 Trend cards (7-day sparklines + target + status) ────────
+        # Fetch 7-day nutrition data
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT date, crono_calories, crono_protein_g, crono_carbs_g,
+                       crono_fat_g, crono_fiber_g, crono_sodium_mg
+                FROM daily_log
+                WHERE date >= %s AND date <= %s
+                ORDER BY date ASC
+            """, (week_start, today))
+            spark_rows = cur.fetchall()
+
+        spark_data = {}
+        for r in spark_rows:
+            spark_data[r["date"]] = r
+
+        trend_defs = [
+            # (key, col, label, unit, target_val, target_label, format_fn)
+            ("calories",  "crono_calories",   "Calories Consumed", "kcal", None,   None,               "int_comma"),
+            ("protein",   "crono_protein_g",  "Protein",           "g",    280,    "Target 280g",      "int"),
+            ("carbs",     "crono_carbs_g",    "Carbohydrates",     "g",    None,   None,               "int"),
+            ("fat",       "crono_fat_g",      "Total Fat",         "g",    50,     "Target 50g",       "int"),
+            ("fiber",     "crono_fiber_g",    "Fiber",             "g",    None,   "Target 26 – 34g",  "one_dec"),
+            ("sodium",    "crono_sodium_mg",  "Sodium",            "mg",   None,   "Target 3,500 – 4,500mg", "int_comma"),
+            ("water",     None,               "Water",             "",     None,   None,               "none"),
+        ]
+
+        trends = []
+        for key, col, label, unit, target_val, target_label, fmt in trend_defs:
+            if key == "water":
+                # Placeholder — no tracking data
+                trends.append({
+                    "id": key,
+                    "label": label,
+                    "value": "--",
+                    "unit": "",
+                    "sparkline": [0, 0, 0, 0, 0, 0, 0],
+                    "avg_label": "",
+                    "status": "No data",
+                    "status_color": "muted",
+                    "no_data": True,
+                })
+                continue
+
+            sparkline = []
+            current = None
+
+            for i in range(7):
+                d = week_start + timedelta(days=i)
+                row = spark_data.get(d)
+                val = None
+                if row and row.get(col) is not None:
+                    val = float(row[col])
+                sparkline.append(val if val is not None else 0)
+                if d == yesterday or (d == today and current is None):
+                    if val is not None and val != 0:
+                        current = val
+
+            # Day-specific targets for calories and carbs
+            if key == "calories":
+                # Use yesterday's target for the pill
+                dow = yesterday.weekday()
+                day_target = 3170 if dow in (1, 2) else 2770
+                target_label = f"Target {int(day_target):,} kcal"
+            elif key == "carbs":
+                dow = yesterday.weekday()
+                day_target = 400 if dow in (1, 2) else 300
+                target_label = f"Target {int(day_target)}g"
+
+            # Status: compare current vs target
+            status_text = "No data"
+            status_color = "muted"
+            if current is not None:
+                if key == "calories":
+                    pct_off = abs(current - day_target) / day_target * 100
+                    if pct_off <= 10:
+                        status_text, status_color = "On track", "normal"
+                    elif current > day_target:
+                        status_text, status_color = "Above", "above"
+                    else:
+                        status_text, status_color = "Below", "below"
+                elif key == "protein":
+                    pct_off = abs(current - 280) / 280 * 100
+                    if pct_off <= 10:
+                        status_text, status_color = "On track", "normal"
+                    elif current > 280:
+                        status_text, status_color = "Above", "normal"
+                    else:
+                        status_text, status_color = "Below", "below"
+                elif key == "carbs":
+                    pct_off = abs(current - day_target) / day_target * 100
+                    if pct_off <= 12:
+                        status_text, status_color = "On track", "normal"
+                    elif current > day_target:
+                        status_text, status_color = "Above", "above"
+                    else:
+                        status_text, status_color = "Below", "below"
+                elif key == "fat":
+                    if current <= 55:
+                        status_text, status_color = "On track", "normal"
+                    else:
+                        status_text, status_color = "Above", "above"
+                elif key == "fiber":
+                    if 26 <= current <= 34:
+                        status_text, status_color = "In range", "normal"
+                    elif current < 26:
+                        status_text, status_color = "Below", "below"
+                    else:
+                        status_text, status_color = "Above", "normal"
+                elif key == "sodium":
+                    if 3500 <= current <= 4500:
+                        status_text, status_color = "In range", "normal"
+                    elif current < 3500:
+                        status_text, status_color = "Below", "below"
+                    else:
+                        status_text, status_color = "Above", "above"
+
+            # Format display value
+            if current is not None:
+                if fmt == "int_comma":
+                    display_val = f"{int(current):,}"
+                elif fmt == "int":
+                    display_val = f"{int(current)}"
+                elif fmt == "one_dec":
+                    display_val = f"{current:.1f}"
+                else:
+                    display_val = f"{current:.0f}"
+            else:
+                display_val = "--"
+
+            trends.append({
+                "id": key,
+                "label": label,
+                "value": display_val,
+                "unit": unit,
+                "sparkline": sparkline,
+                "avg_label": target_label or "",
+                "status": status_text,
+                "status_color": status_color,
+                "no_data": False,
+            })
+
+    finally:
+        conn.close()
+
+    return render_template(
+        "nutrition.html",
+        active_page="nutrition",
+        nutrition_score=nutrition_score,
+        hero_summary=hero_summary,
+        high_carb_day=high_carb_day,
+        day_type=day_type,
+        pills=pills,
+        perf_labels=perf_labels,
+        perf_scores=perf_scores,
+        donut_good=donut_counts["good"],
+        donut_fair=donut_counts["fair"],
+        donut_poor=donut_counts["poor"],
+        trends=trends,
+    )
+
+
 # ── Run ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
