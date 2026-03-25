@@ -1,18 +1,480 @@
 {% extends 'base.html' %}
 {% from 'components/hero.html' import hero %}
+{% from 'components/score_circle.html' import score_circle %}
+{% from 'components/trend_card.html' import trend_card %}
 
 {% block title %}nsight — Home{% endblock %}
 
+{% block head %}
+<style>
+  /* ── Score Row ──────────────────────────────────────────────── */
+  .scores-row {
+    margin-top: calc(var(--section-gap) * -0.5);
+    position: relative;
+    z-index: 2;
+  }
+
+  .scores-row-inner {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    padding: 24px 32px;
+    max-width: 600px;
+    margin: 0 auto;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  }
+
+  .scores-row-inner .score-circle a:hover {
+    text-decoration: none;
+    filter: brightness(1.1);
+  }
+
+  /* ── Home Layout ───────────────────────────────────────────── */
+  .home-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: var(--section-gap);
+    margin-top: var(--section-gap);
+  }
+
+  .home-main {
+    min-width: 0;
+  }
+
+  .home-sidebar {
+    min-width: 0;
+  }
+
+  .trends-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .trends-list .trend-card {
+    padding: 16px;
+  }
+
+  /* ── Trend Delta ───────────────────────────────────────────── */
+  .trend-delta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 100px;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .trend-delta-up {
+    color: var(--green);
+    background: rgba(169, 182, 101, 0.12);
+  }
+
+  .trend-delta-down {
+    color: var(--red);
+    background: rgba(234, 105, 98, 0.12);
+  }
+
+  /* ── Workout Cards ─────────────────────────────────────────── */
+  .workout-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .workout-card {
+    padding: 20px;
+  }
+
+  .workout-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .workout-date {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+  }
+
+  .workout-duration {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .workout-muscles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .muscle-tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: rgba(125, 174, 163, 0.12);
+    color: var(--blue);
+    border: 1px solid rgba(125, 174, 163, 0.2);
+  }
+
+  .workout-stats {
+    display: flex;
+    gap: 24px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .workout-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .workout-stat-value {
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+
+  .workout-stat-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Chart Cards ───────────────────────────────────────────── */
+  .chart-card {
+    padding: 20px;
+  }
+
+  .chart-card-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .chart-wrap {
+    height: 160px;
+    position: relative;
+  }
+
+  .chart-wrap canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* ── Responsive ────────────────────────────────────────────── */
+  @media (max-width: 1100px) {
+    .home-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .home-sidebar {
+      order: 2;
+    }
+
+    .trends-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    }
+  }
+
+  @media (max-width: 768px) {
+    .scores-row-inner {
+      gap: 20px;
+      padding: 20px;
+    }
+
+    .scores-row-inner .score-circle svg {
+      width: 80px;
+      height: 80px;
+    }
+
+    .workout-cards {
+      grid-template-columns: 1fr;
+    }
+
+    .trends-list {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .scores-row-inner {
+      gap: 16px;
+      padding: 16px;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block hero %}
-  {{ hero(image='home.jpg', title=greeting, subtitle=today_str,
-          summary='Your personal health intelligence dashboard.', score=82, score_label='Overall') }}
+  {{ hero(
+      image='home.jpg',
+      title=greeting,
+      subtitle=today_str,
+      summary=daily_summary,
+      score=overall_score,
+      score_label='Overall'
+  ) }}
 {% endblock %}
 
 {% block content %}
-<div class="mt-section">
-  <h2>Coming soon</h2>
-  <p class="text-secondary" style="margin-top: 8px;">
-    Dashboard pages are being built. Check back shortly.
-  </p>
+
+{# ── Score Row ─────────────────────────────────────────────────── #}
+<section class="scores-row">
+  <div class="scores-row-inner">
+    {{ score_circle(score=sleep_score, label='Sleep', size=100, href='/sleep') }}
+    {{ score_circle(score=recovery_score, label='Recovery', size=100, href='/recovery') }}
+    {{ score_circle(score=training_score, label='Training', size=100, href='/training') }}
+    {{ score_circle(score=nutrition_score, label='Nutrition', size=100, href='/nutrition') }}
+  </div>
+</section>
+
+{# ── Main + Sidebar Layout ────────────────────────────────────── #}
+<div class="home-layout">
+
+  {# ── Main Column ─────────────────────────────────────────────── #}
+  <div class="home-main">
+
+    {# ── Recent Activity ───────────────────────────────────────── #}
+    {% if recent_workouts %}
+    <section>
+      <div class="section-header">
+        <h3 class="section-title">Recent Activity</h3>
+        <a href="/training" class="section-action">
+          See All
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </a>
+      </div>
+      <div class="workout-cards">
+        {% for w in recent_workouts %}
+        <div class="card workout-card">
+          <div class="workout-card-header">
+            <span class="workout-date">{{ w.date_str }}</span>
+            {% if w.duration %}
+              <span class="workout-duration">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                {{ w.duration }} min
+              </span>
+            {% endif %}
+          </div>
+          <div class="workout-muscles">
+            {% for m in w.muscle_groups %}
+              <span class="muscle-tag">{{ m }}</span>
+            {% endfor %}
+          </div>
+          <div class="workout-stats">
+            <div class="workout-stat">
+              <span class="workout-stat-value metric-value">{{ "{:,}".format(w.total_volume) }}</span>
+              <span class="workout-stat-label">lbs volume</span>
+            </div>
+            <div class="workout-stat">
+              <span class="workout-stat-value metric-value">{{ w.set_count }}</span>
+              <span class="workout-stat-label">sets</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {# ── Weekly Charts ─────────────────────────────────────────── #}
+    <section class="mt-section">
+      <div class="section-header">
+        <h3 class="section-title">This Week</h3>
+      </div>
+      <div class="card-grid">
+        <div class="card chart-card">
+          <h4 class="chart-card-title">Avg Heart Rate</h4>
+          <div class="chart-wrap">
+            <canvas id="chart-weekly-hr"></canvas>
+          </div>
+        </div>
+        <div class="card chart-card">
+          <h4 class="chart-card-title">Time Asleep</h4>
+          <div class="chart-wrap">
+            <canvas id="chart-weekly-sleep"></canvas>
+          </div>
+        </div>
+        <div class="card chart-card">
+          <h4 class="chart-card-title">Steps</h4>
+          <div class="chart-wrap">
+            <canvas id="chart-weekly-steps"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  {# ── Trends Sidebar ──────────────────────────────────────────── #}
+  <aside class="home-sidebar">
+    <div class="section-header">
+      <h3 class="section-title">Your Trends</h3>
+    </div>
+    <div class="trends-list">
+
+      {# HRV #}
+      {% set t = trends.get('hrv', {}) %}
+      <div class="card trend-card">
+        <div class="trend-label">Heart Rate Variability</div>
+        <div class="trend-value-row">
+          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+          <span class="trend-unit">{{ t.get('unit', 'ms') }}</span>
+          {% if t.get('delta') is not none %}
+            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+            </span>
+          {% endif %}
+        </div>
+        <div class="trend-sparkline">
+          <canvas id="spark-hrv"></canvas>
+        </div>
+      </div>
+
+      {# Resting HR #}
+      {% set t = trends.get('resting_hr', {}) %}
+      <div class="card trend-card">
+        <div class="trend-label">Resting Heart Rate</div>
+        <div class="trend-value-row">
+          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+          <span class="trend-unit">{{ t.get('unit', 'bpm') }}</span>
+          {% if t.get('delta') is not none %}
+            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) != t.higher_is_better else 'trend-delta-down' }}">
+              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+            </span>
+          {% endif %}
+        </div>
+        <div class="trend-sparkline">
+          <canvas id="spark-rhr"></canvas>
+        </div>
+      </div>
+
+      {# Steps #}
+      {% set t = trends.get('steps', {}) %}
+      <div class="card trend-card">
+        <div class="trend-label">Steps</div>
+        <div class="trend-value-row">
+          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+          {% if t.get('delta') is not none %}
+            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+            </span>
+          {% endif %}
+        </div>
+        <div class="trend-sparkline">
+          <canvas id="spark-steps"></canvas>
+        </div>
+      </div>
+
+      {# Body Battery #}
+      {% set t = trends.get('body_battery', {}) %}
+      <div class="card trend-card">
+        <div class="trend-label">Body Battery</div>
+        <div class="trend-value-row">
+          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+          {% if t.get('delta') is not none %}
+            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+            </span>
+          {% endif %}
+        </div>
+        <div class="trend-sparkline">
+          <canvas id="spark-bb"></canvas>
+        </div>
+      </div>
+
+      {# Sleep Hours #}
+      {% set t = trends.get('sleep_hours', {}) %}
+      <div class="card trend-card">
+        <div class="trend-label">Sleep</div>
+        <div class="trend-value-row">
+          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+          <span class="trend-unit">{{ t.get('unit', 'hrs') }}</span>
+          {% if t.get('delta') is not none %}
+            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+            </span>
+          {% endif %}
+        </div>
+        <div class="trend-sparkline">
+          <canvas id="spark-sleep"></canvas>
+        </div>
+      </div>
+
+      {# Calories #}
+      {% set t = trends.get('calories', {}) %}
+      <div class="card trend-card">
+        <div class="trend-label">Calories</div>
+        <div class="trend-value-row">
+          <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+          <span class="trend-unit">{{ t.get('unit', 'kcal') }}</span>
+          {% if t.get('delta') is not none %}
+            <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
+              {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
+            </span>
+          {% endif %}
+        </div>
+        <div class="trend-sparkline">
+          <canvas id="spark-cals"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
 </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='charts.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+  // ── Weekly Charts ────────────────────────────────────────────
+  var weeklyHR    = {{ weekly_hr | tojson }};
+  var weeklySleep = {{ weekly_sleep | tojson }};
+  var weeklySteps = {{ weekly_steps | tojson }};
+
+  createWeeklyChart('chart-weekly-hr',    weeklyHR,    'Avg HR (bpm)',   '#ea6962');
+  createWeeklyChart('chart-weekly-sleep',  weeklySleep, 'Sleep (hrs)',    '#7daea3');
+  createWeeklyChart('chart-weekly-steps',  weeklySteps, 'Steps',          '#a9b665');
+
+  // ── Trend Sparklines ────────────────────────────────────────
+  var trends = {{ trends | tojson }};
+
+  createSparkline('spark-hrv',   trends.hrv            ? trends.hrv.sparkline            : [], '#a9b665');
+  createSparkline('spark-rhr',   trends.resting_hr     ? trends.resting_hr.sparkline     : [], '#ea6962');
+  createSparkline('spark-steps', trends.steps           ? trends.steps.sparkline           : [], '#a9b665');
+  createSparkline('spark-bb',    trends.body_battery    ? trends.body_battery.sparkline    : [], '#d8a657');
+  createSparkline('spark-sleep', trends.sleep_hours     ? trends.sleep_hours.sparkline     : [], '#7daea3');
+  createSparkline('spark-cals',  trends.calories        ? trends.calories.sparkline        : [], '#e78a4e');
+
+});
+</script>
 {% endblock %}
