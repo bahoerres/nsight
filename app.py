@@ -2022,6 +2022,221 @@ def insights_page():
     return render_template("insights.html", active_page="insights", tab=tab, items=items)
 
 
+# ── Correlations ─────────────────────────────────────────────────────
+
+
+def run_correlations_for_display() -> dict:
+    """Run correlation analysis and return results for template rendering."""
+    try:
+        import numpy as np
+        from scipy import stats
+        from statsmodels.stats.multitest import multipletests
+        import pandas as pd
+    except ImportError:
+        return {
+            "findings": [],
+            "total_tests": 0,
+            "significant_count": 0,
+            "num_pairs": 0,
+            "num_lags": 0,
+            "alpha": 0.10,
+            "error": "Required packages not installed (scipy, statsmodels, pandas).",
+        }
+
+    lags = [0, 1, 2, 3, 7]
+    min_n = 15
+    alpha = 0.10
+
+    pairs = [
+        ("hrv_nightly_avg", "hevy_total_volume_lbs"),
+        ("sleep_deep_sec", "crono_last_meal_time"),
+        ("sleep_deep_sec", "steps"),
+        ("body_battery_eod", "steps"),
+        ("hrv_nightly_avg", "stress_avg"),
+        ("sleep_total_sec", "resting_hr"),
+        ("hrv_nightly_avg", "crono_protein_g"),
+        ("sleep_deep_sec", "hevy_total_volume_lbs"),
+    ]
+
+    interpretations = {
+        ("hrv_nightly_avg", "hevy_total_volume_lbs", "pos"):
+            "Higher HRV nights precede higher training volume.",
+        ("hrv_nightly_avg", "hevy_total_volume_lbs", "neg"):
+            "Higher HRV nights precede lower training volume.",
+        ("sleep_deep_sec", "crono_last_meal_time", "neg"):
+            "Later last meal correlates with less deep sleep.",
+        ("sleep_deep_sec", "crono_last_meal_time", "pos"):
+            "Earlier last meal correlates with less deep sleep (unexpected).",
+        ("sleep_deep_sec", "steps", "pos"):
+            "More deep sleep associates with higher step counts.",
+        ("sleep_deep_sec", "steps", "neg"):
+            "More deep sleep associates with fewer steps (possible rest-day effect).",
+        ("body_battery_eod", "steps", "neg"):
+            "Higher step days strongly predict lower end-of-day body battery.",
+        ("body_battery_eod", "steps", "pos"):
+            "Higher step days predict higher end-of-day body battery.",
+        ("hrv_nightly_avg", "stress_avg", "neg"):
+            "Higher HRV correlates with lower average stress.",
+        ("hrv_nightly_avg", "stress_avg", "pos"):
+            "Higher HRV correlates with higher stress (unexpected).",
+        ("sleep_total_sec", "resting_hr", "neg"):
+            "More total sleep associates with lower resting heart rate.",
+        ("sleep_total_sec", "resting_hr", "pos"):
+            "More total sleep associates with higher resting heart rate.",
+        ("hrv_nightly_avg", "crono_protein_g", "pos"):
+            "Higher HRV nights associate with higher protein intake.",
+        ("hrv_nightly_avg", "crono_protein_g", "neg"):
+            "Higher HRV nights associate with lower protein intake.",
+        ("sleep_deep_sec", "hevy_total_volume_lbs", "pos"):
+            "More deep sleep precedes higher training volume.",
+        ("sleep_deep_sec", "hevy_total_volume_lbs", "neg"):
+            "More deep sleep precedes lower training volume.",
+    }
+
+    # Use a plain connection (no RealDictCursor) for pd.read_sql compatibility
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    try:
+        import pandas as pd
+        df = pd.read_sql("SELECT * FROM daily_log ORDER BY date", conn)
+    finally:
+        conn.close()
+
+    if df.empty:
+        return {
+            "findings": [],
+            "exploratory": [],
+            "total_tests": 0,
+            "significant_count": 0,
+            "num_pairs": len(pairs),
+            "num_lags": len(lags),
+            "alpha": alpha,
+        }
+
+    df.sort_values("date", inplace=True)
+    df.set_index("date", inplace=True)
+
+    # Convert last meal time to decimal hours
+    if "crono_last_meal_time" in df.columns:
+
+        def _to_hours(val):
+            if pd.isna(val):
+                return np.nan
+            if hasattr(val, "hour") and hasattr(val, "minute"):
+                return val.hour + val.minute / 60.0 + val.second / 3600.0
+            if hasattr(val, "total_seconds"):
+                return val.total_seconds() / 3600.0
+            return np.nan
+
+        df["crono_last_meal_time"] = df["crono_last_meal_time"].apply(_to_hours)
+
+    # Ensure numeric
+    for col in [
+        "hrv_nightly_avg", "hevy_total_volume_lbs", "sleep_deep_sec",
+        "crono_last_meal_time", "steps", "body_battery_eod", "stress_avg",
+        "sleep_total_sec", "resting_hr", "crono_protein_g",
+    ]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # Run correlations
+    results = []
+    for x_col, y_col in pairs:
+        if x_col not in df.columns or y_col not in df.columns:
+            continue
+        for lag in lags:
+            x = df[x_col]
+            y = df[y_col].shift(-lag)
+            mask = x.notna() & y.notna()
+            x_clean = x[mask].astype(float)
+            y_clean = y[mask].astype(float)
+            if len(x_clean) < min_n:
+                continue
+            if x_clean.std() == 0 or y_clean.std() == 0:
+                continue
+            r, p = stats.pearsonr(x_clean, y_clean)
+            results.append({
+                "x": x_col, "y": y_col, "lag_days": lag,
+                "r": r, "p_raw": p, "n": len(x_clean),
+            })
+
+    if not results:
+        return {
+            "findings": [],
+            "exploratory": [],
+            "total_tests": 0,
+            "significant_count": 0,
+            "num_pairs": len(pairs),
+            "num_lags": len(lags),
+            "alpha": alpha,
+        }
+
+    # FDR correction
+    p_values = np.array([r["p_raw"] for r in results])
+    reject, p_corrected, _, _ = multipletests(p_values, alpha=alpha, method="fdr_bh")
+
+    findings = []
+    for i, res in enumerate(results):
+        if reject[i]:
+            sign = "pos" if res["r"] > 0 else "neg"
+            interp_key = (res["x"], res["y"], sign)
+            interp = interpretations.get(
+                interp_key,
+                f"{res['x']} is {'positively' if res['r'] > 0 else 'negatively'} correlated with {res['y']}.",
+            )
+            findings.append({
+                "x": res["x"],
+                "y": res["y"],
+                "lag_days": res["lag_days"],
+                "r": res["r"],
+                "p_corrected": p_corrected[i],
+                "n": res["n"],
+                "interpretation": interp,
+            })
+
+    # Sort by absolute r
+    findings.sort(key=lambda f: abs(f["r"]), reverse=True)
+
+    # Build exploratory results (top uncorrected) as fallback
+    exploratory = []
+    if not findings:
+        # Show strongest raw correlations (p < 0.05 uncorrected) so the page isn't empty
+        for i, res in enumerate(results):
+            if res["p_raw"] < 0.05:
+                sign = "pos" if res["r"] > 0 else "neg"
+                interp_key = (res["x"], res["y"], sign)
+                interp = interpretations.get(
+                    interp_key,
+                    f"{res['x']} is {'positively' if res['r'] > 0 else 'negatively'} correlated with {res['y']}.",
+                )
+                exploratory.append({
+                    "x": res["x"],
+                    "y": res["y"],
+                    "lag_days": res["lag_days"],
+                    "r": res["r"],
+                    "p_corrected": res["p_raw"],  # raw p in this case
+                    "n": res["n"],
+                    "interpretation": interp,
+                })
+        exploratory.sort(key=lambda f: abs(f["r"]), reverse=True)
+        exploratory = exploratory[:10]  # top 10
+
+    return {
+        "findings": findings,
+        "exploratory": exploratory,
+        "total_tests": len(results),
+        "significant_count": len(findings),
+        "num_pairs": len(pairs),
+        "num_lags": len(lags),
+        "alpha": alpha,
+    }
+
+
+@app.route("/correlations")
+def correlations_page():
+    results = run_correlations_for_display()
+    return render_template("correlations.html", active_page="correlations", results=results)
+
+
 # ── Run ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

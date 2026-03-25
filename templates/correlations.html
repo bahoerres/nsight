@@ -1,0 +1,618 @@
+{% extends 'base.html' %}
+{% from 'components/hero.html' import hero %}
+
+{% block title %}nsight — Correlations{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Summary Bar ───────────────────────────────────────────────── */
+  .corr-summary {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 16px 22px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    margin-top: var(--section-gap);
+    flex-wrap: wrap;
+  }
+
+  .corr-summary-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .corr-summary-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+
+  .corr-summary-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .corr-summary-divider {
+    width: 1px;
+    height: 36px;
+    background: var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  .corr-summary-alpha {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 6px 12px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Section Header ────────────────────────────────────────────── */
+  .corr-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-top: var(--section-gap);
+    margin-bottom: 20px;
+  }
+
+  .corr-section-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  .corr-section-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 100px;
+    padding: 2px 10px;
+  }
+
+  .corr-exploratory-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: rgba(215, 166, 87, 0.15);
+    color: var(--yellow);
+    border: 1px solid rgba(215, 166, 87, 0.3);
+  }
+
+  /* ── Finding Cards ─────────────────────────────────────────────── */
+  .corr-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .corr-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    border-left-width: 4px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    animation: corrCardIn 0.35s ease both;
+  }
+
+  .corr-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  }
+
+  /* Positive r = green border (green outcome) */
+  .corr-card.r-pos { border-left-color: var(--green); }
+  /* Negative r = amber border */
+  .corr-card.r-neg { border-left-color: var(--amber); }
+
+  @keyframes corrCardIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .corr-card:nth-child(1)  { animation-delay: 0.00s; }
+  .corr-card:nth-child(2)  { animation-delay: 0.05s; }
+  .corr-card:nth-child(3)  { animation-delay: 0.10s; }
+  .corr-card:nth-child(4)  { animation-delay: 0.15s; }
+  .corr-card:nth-child(5)  { animation-delay: 0.20s; }
+  .corr-card:nth-child(6)  { animation-delay: 0.25s; }
+  .corr-card:nth-child(7)  { animation-delay: 0.30s; }
+  .corr-card:nth-child(8)  { animation-delay: 0.35s; }
+  .corr-card:nth-child(9)  { animation-delay: 0.40s; }
+  .corr-card:nth-child(10) { animation-delay: 0.45s; }
+
+  .corr-card-inner {
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .corr-card-left {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .corr-interpretation {
+    font-size: 0.97rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.45;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Strength bar ──────────────────────────────────────────────── */
+  .corr-strength {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .corr-strength-labels {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .corr-r-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .corr-card.r-pos .corr-r-value { color: var(--green); }
+  .corr-card.r-neg .corr-r-value { color: var(--amber); }
+
+  .corr-strength-word {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.70rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .corr-bar-track {
+    height: 6px;
+    background: var(--bg-elevated);
+    border-radius: 100px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .corr-bar-fill {
+    height: 100%;
+    border-radius: 100px;
+    width: 0%;
+    transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .corr-card.r-pos .corr-bar-fill { background: var(--green); }
+  .corr-card.r-neg .corr-bar-fill { background: var(--amber); }
+
+  /* ── Meta chips ────────────────────────────────────────────────── */
+  .corr-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .corr-chip {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 3px 9px;
+    border-radius: 6px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .corr-chip.lag-same  { color: var(--blue); border-color: rgba(125, 174, 163, 0.3); background: rgba(125, 174, 163, 0.08); }
+  .corr-chip.lag-short { color: var(--cyan); border-color: rgba(137, 180, 130, 0.3); background: rgba(137, 180, 130, 0.08); }
+  .corr-chip.lag-long  { color: var(--purple); border-color: rgba(211, 134, 155, 0.3); background: rgba(211, 134, 155, 0.08); }
+
+  /* ── Right panel: p-value + n ──────────────────────────────────── */
+  .corr-card-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+
+  .corr-pvalue {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .corr-n {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 2px 7px;
+  }
+
+  /* ── Variable pair label ───────────────────────────────────────── */
+  .corr-pair {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    opacity: 0.7;
+    margin-top: 2px;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Empty / Error state ───────────────────────────────────────── */
+  .corr-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 64px 24px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .corr-empty-icon {
+    width: 56px;
+    height: 56px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .corr-empty-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+
+  .corr-empty-body {
+    font-size: 0.88rem;
+    max-width: 340px;
+    line-height: 1.6;
+  }
+
+  /* ── Methodology footer ────────────────────────────────────────── */
+  .corr-methodology {
+    margin-top: calc(var(--section-gap) * 1.5);
+    padding: 18px 22px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .corr-methodology-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .corr-methodology-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    line-height: 1.65;
+    letter-spacing: 0.02em;
+  }
+
+  .corr-methodology-text strong {
+    color: var(--text-secondary);
+    font-weight: 700;
+  }
+
+  /* ── Responsive ────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .corr-summary {
+      gap: 14px;
+    }
+
+    .corr-summary-alpha {
+      margin-left: 0;
+      flex-basis: 100%;
+    }
+
+    .corr-card-inner {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .corr-card-right {
+      flex-direction: row;
+      align-items: center;
+    }
+
+    .corr-methodology {
+      flex-direction: column;
+      gap: 10px;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block hero %}
+  {{ hero(
+      image='insights.jpg',
+      title='Correlations',
+      subtitle='Pearson analysis across your health metrics'
+  ) }}
+{% endblock %}
+
+{% block content %}
+
+{# ── Error state ─────────────────────────────────────────────────── #}
+{% if results.get('error') %}
+<div class="corr-empty">
+  <div class="corr-empty-icon">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+         stroke="var(--amber)" stroke-width="1.5"
+         stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+  </div>
+  <p class="corr-empty-title">Analysis unavailable</p>
+  <p class="corr-empty-body">{{ results.error }}</p>
+</div>
+
+{# ── Normal results ──────────────────────────────────────────────── #}
+{% else %}
+
+{# ── Summary bar ─────────────────────────────────────────────────── #}
+<div class="corr-summary">
+  <div class="corr-summary-stat">
+    <span class="corr-summary-value">{{ results.significant_count }}</span>
+    <span class="corr-summary-label">Significant</span>
+  </div>
+  <div class="corr-summary-divider"></div>
+  <div class="corr-summary-stat">
+    <span class="corr-summary-value">{{ results.total_tests }}</span>
+    <span class="corr-summary-label">Tests run</span>
+  </div>
+  <div class="corr-summary-divider"></div>
+  <div class="corr-summary-stat">
+    <span class="corr-summary-value">{{ results.num_pairs }}</span>
+    <span class="corr-summary-label">Metric pairs</span>
+  </div>
+  <div class="corr-summary-divider"></div>
+  <div class="corr-summary-stat">
+    <span class="corr-summary-value">{{ results.num_lags }}</span>
+    <span class="corr-summary-label">Lag windows</span>
+  </div>
+  <span class="corr-summary-alpha">FDR &alpha; = {{ "%.2f"|format(results.alpha) }}</span>
+</div>
+
+{# ── FDR-significant findings ─────────────────────────────────────── #}
+{% if results.findings %}
+<div class="corr-section-header">
+  <span class="corr-section-title">Significant Correlations</span>
+  <span class="corr-section-count">{{ results.findings | length }}</span>
+</div>
+
+<div class="corr-list" id="corr-list-significant">
+  {% for f in results.findings %}
+  {% set abs_r = f.r | abs %}
+  {% set r_pct = (abs_r * 100) | round | int %}
+  {% set r_class = 'r-pos' if f.r >= 0 else 'r-neg' %}
+  {% if abs_r >= 0.5 %}{% set strength = 'Strong' %}
+  {% elif abs_r >= 0.3 %}{% set strength = 'Moderate' %}
+  {% else %}{% set strength = 'Weak' %}
+  {% endif %}
+  {% if f.lag_days == 0 %}{% set lag_label = 'Same day' %}{% set lag_class = 'lag-same' %}
+  {% elif f.lag_days == 1 %}{% set lag_label = '1-day lag' %}{% set lag_class = 'lag-short' %}
+  {% elif f.lag_days <= 3 %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-short' %}
+  {% else %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-long' %}
+  {% endif %}
+  <article class="corr-card {{ r_class }}" data-r-pct="{{ r_pct }}">
+    <div class="corr-card-inner">
+      <div class="corr-card-left">
+        <p class="corr-interpretation">{{ f.interpretation }}</p>
+        <div class="corr-strength">
+          <div class="corr-strength-labels">
+            <span class="corr-r-value">r = {{ "%.2f"|format(f.r) }}</span>
+            <span class="corr-strength-word">{{ strength }}</span>
+          </div>
+          <div class="corr-bar-track">
+            <div class="corr-bar-fill" style="--target-width: {{ r_pct }}%"></div>
+          </div>
+        </div>
+        <div class="corr-meta">
+          <span class="corr-chip {{ lag_class }}">{{ lag_label }}</span>
+          <span class="corr-chip">n = {{ f.n }}</span>
+          <span class="corr-pair">{{ f.x }} &times; {{ f.y }}</span>
+        </div>
+      </div>
+      <div class="corr-card-right">
+        <span class="corr-pvalue">p = {{ "%.4f"|format(f.p_corrected) }}</span>
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+{# ── No FDR findings — show exploratory ──────────────────────────── #}
+{% else %}
+
+{% if results.exploratory %}
+<div class="corr-section-header">
+  <span class="corr-section-title">Exploratory Findings</span>
+  <span class="corr-section-count">{{ results.exploratory | length }}</span>
+  <span class="corr-exploratory-badge">Not FDR-corrected</span>
+</div>
+
+<div class="corr-list" id="corr-list-exploratory">
+  {% for f in results.exploratory %}
+  {% set abs_r = f.r | abs %}
+  {% set r_pct = (abs_r * 100) | round | int %}
+  {% set r_class = 'r-pos' if f.r >= 0 else 'r-neg' %}
+  {% if abs_r >= 0.5 %}{% set strength = 'Strong' %}
+  {% elif abs_r >= 0.3 %}{% set strength = 'Moderate' %}
+  {% else %}{% set strength = 'Weak' %}
+  {% endif %}
+  {% if f.lag_days == 0 %}{% set lag_label = 'Same day' %}{% set lag_class = 'lag-same' %}
+  {% elif f.lag_days == 1 %}{% set lag_label = '1-day lag' %}{% set lag_class = 'lag-short' %}
+  {% elif f.lag_days <= 3 %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-short' %}
+  {% else %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-long' %}
+  {% endif %}
+  <article class="corr-card {{ r_class }}" data-r-pct="{{ r_pct }}">
+    <div class="corr-card-inner">
+      <div class="corr-card-left">
+        <p class="corr-interpretation">{{ f.interpretation }}</p>
+        <div class="corr-strength">
+          <div class="corr-strength-labels">
+            <span class="corr-r-value">r = {{ "%.2f"|format(f.r) }}</span>
+            <span class="corr-strength-word">{{ strength }}</span>
+          </div>
+          <div class="corr-bar-track">
+            <div class="corr-bar-fill" style="--target-width: {{ r_pct }}%"></div>
+          </div>
+        </div>
+        <div class="corr-meta">
+          <span class="corr-chip {{ lag_class }}">{{ lag_label }}</span>
+          <span class="corr-chip">n = {{ f.n }}</span>
+          <span class="corr-pair">{{ f.x }} &times; {{ f.y }}</span>
+        </div>
+      </div>
+      <div class="corr-card-right">
+        <span class="corr-pvalue">p = {{ "%.4f"|format(f.p_corrected) }}</span>
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+{% else %}
+{# ── Truly empty ─────────────────────────────────────────────────── #}
+<div class="corr-empty">
+  <div class="corr-empty-icon">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+         stroke="var(--text-muted)" stroke-width="1.5"
+         stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="18" cy="5" r="3"/>
+      <circle cx="6" cy="12" r="3"/>
+      <circle cx="18" cy="19" r="3"/>
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+    </svg>
+  </div>
+  <p class="corr-empty-title">No correlations found yet</p>
+  <p class="corr-empty-body">
+    More data is needed to detect reliable patterns.
+    Correlations are computed once at least {{ results.num_pairs }} metric pairs
+    have sufficient daily observations.
+  </p>
+</div>
+{% endif %}
+{% endif %}
+
+{# ── Methodology note ─────────────────────────────────────────────── #}
+<div class="corr-methodology">
+  <div class="corr-methodology-icon">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+         stroke="var(--text-muted)" stroke-width="1.5"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 4v16"/>
+    </svg>
+  </div>
+  <p class="corr-methodology-text">
+    <strong>Methodology:</strong>
+    Pearson correlations computed across {{ results.num_pairs }} metric pairs
+    at {{ results.num_lags }} lag windows (0, 1, 2, 3, 7 days),
+    yielding up to {{ results.total_tests }} tests total.
+    Multiple-comparison correction applied using
+    <strong>Benjamini-Hochberg FDR</strong> at &alpha;&nbsp;=&nbsp;{{ "%.2f"|format(results.alpha) }}.
+    Minimum {{ 15 }} overlapping observations required per pair.
+    Positive&nbsp;r (green) indicates metrics that rise and fall together;
+    negative&nbsp;r (amber) indicates an inverse relationship.
+  </p>
+</div>
+
+{% endif %}{# end error/results #}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Animate strength bars in after cards appear
+  (function () {
+    const fills = document.querySelectorAll('.corr-bar-fill');
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const el = entry.target;
+            const target = el.style.getPropertyValue('--target-width') || '0%';
+            // Small delay so card entrance animation finishes first
+            setTimeout(() => {
+              el.style.width = target;
+            }, 120);
+            observer.unobserve(el);
+          }
+        });
+      },
+      { threshold: 0.2 }
+    );
+    fills.forEach((el) => observer.observe(el));
+  })();
+</script>
+{% endblock %}
