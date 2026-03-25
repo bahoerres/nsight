@@ -7,7 +7,7 @@ import markdown
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
-from flask import Flask, render_template, send_from_directory
+from flask import Flask, render_template, request, send_from_directory
 from markupsafe import Markup
 from zoneinfo import ZoneInfo
 
@@ -2003,6 +2003,23 @@ def checkin(days: int = 14):
         weekly_insight=weekly_insight,
         body_weight=body_weight,
     )
+
+
+@app.route("/insights")
+def insights_page():
+    """Insights archive — daily, weekly, monthly."""
+    tab = request.args.get("tab", "daily")
+    if tab not in ("daily", "weekly", "monthly"):
+        tab = "daily"
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT date, type, content FROM insights WHERE type = %s ORDER BY date DESC LIMIT 30",
+        (tab,),
+    )
+    items = cur.fetchall()
+    conn.close()
+    return render_template("insights.html", active_page="insights", tab=tab, items=items)
 
 
 # ── Run ─────────────────────────────────────────────────────────────
