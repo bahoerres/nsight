@@ -543,25 +543,74 @@ h4 { font-size: 1rem; }
     margin-left: 0;
   }
 
-  .hero-inner {
-    padding: 24px 20px;
-    flex-direction: column;
-    align-items: flex-start;
+  .hero {
+    height: auto;
+    min-height: 220px;
   }
 
-  .hero-title { font-size: 1.5rem; }
+  .hero-inner {
+    padding: 60px 20px 24px;  /* top padding clears hamburger */
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
+  .hero-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hero-title { font-size: 1.4rem; }
+  .hero-subtitle { font-size: 0.85rem; }
+  .hero-summary { font-size: 0.8rem; -webkit-line-clamp: 2; }
+
+  .hero-score {
+    padding-right: 0;
+  }
+
+  .hero-score .score-circle svg {
+    width: 80px;
+    height: 80px;
+  }
+
+  .hero-score .score-number {
+    font-size: 1.3rem !important;
+  }
+
+  .hero-score .score-label {
+    font-size: 0.6rem !important;
+  }
 
   .page-content {
-    padding: 24px 16px;
+    padding: 20px 16px;
   }
 
   .score-circle svg {
-    width: 90px;
-    height: 90px;
+    width: 80px;
+    height: 80px;
   }
 
   .score-number {
-    font-size: 1.5rem !important;
+    font-size: 1.3rem !important;
+  }
+
+  .score-label {
+    font-size: 0.65rem !important;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .section-header {
+    margin-bottom: 14px;
+  }
+
+  h2 { font-size: 1.25rem; }
+  h3 { font-size: 1.05rem; }
+
+  .donut-container {
+    flex-direction: column;
+    gap: 16px;
   }
 }
 
@@ -569,8 +618,6 @@ h4 { font-size: 1rem; }
   .card-grid {
     grid-template-columns: 1fr;
   }
-
-  .hero { height: 240px; }
 }
 
 @media (min-width: 481px) and (max-width: 1023px) {
