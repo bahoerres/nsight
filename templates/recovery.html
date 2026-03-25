@@ -1,0 +1,530 @@
+{% extends 'base.html' %}
+{% from 'components/hero.html' import hero %}
+{% from 'components/score_circle.html' import score_circle %}
+{% from 'components/trend_card.html' import trend_card %}
+{% from 'components/donut.html' import donut %}
+
+{% block title %}nsight — Recovery{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Vitals Row ──────────────────────────────────────────────────── */
+  .vitals-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-top: calc(var(--section-gap) * -0.5);
+    position: relative;
+    z-index: 2;
+  }
+
+  .vital-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 20px 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .vital-pill:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  }
+
+  .vital-pill-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+  }
+
+  .vital-pill-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+
+  .vital-pill-unit {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-left: 2px;
+  }
+
+  .vital-pill-delta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: 100px;
+    padding: 2px 10px;
+  }
+
+  .vital-pill-delta.delta-green {
+    background: rgba(169, 182, 101, 0.12);
+    color: #a9b665;
+  }
+
+  .vital-pill-delta.delta-amber {
+    background: rgba(216, 166, 87, 0.12);
+    color: #d8a657;
+  }
+
+  .vital-pill-delta.delta-red {
+    background: rgba(234, 105, 98, 0.12);
+    color: #ea6962;
+  }
+
+  .vital-pill-delta.delta-muted {
+    background: rgba(168, 153, 132, 0.1);
+    color: var(--text-muted);
+  }
+
+  /* ── Today's Activity ────────────────────────────────────────────── */
+  .activity-card {
+    padding: 24px;
+    margin-top: var(--section-gap);
+  }
+
+  .activity-card-inner {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .activity-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .activity-details {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .activity-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+
+  .muscle-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .muscle-tag {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: rgba(125, 174, 163, 0.12);
+    color: #7daea3;
+  }
+
+  .activity-stats {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .activity-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .activity-stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .activity-stat-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .rest-day-msg {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+  }
+
+  .rest-day-msg svg {
+    flex-shrink: 0;
+  }
+
+  /* ── Recovery Performance ────────────────────────────────────────── */
+  .recovery-perf-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    margin-top: var(--section-gap);
+  }
+
+  .perf-chart-card {
+    padding: 24px;
+  }
+
+  .perf-chart-wrap {
+    height: 240px;
+    margin-top: 16px;
+  }
+
+  /* ── Trends Grid ─────────────────────────────────────────────────── */
+  .recovery-trends-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-top: var(--section-gap);
+  }
+
+  /* ── Explore More ────────────────────────────────────────────────── */
+  .explore-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: var(--section-gap);
+  }
+
+  .explore-card {
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .explore-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  }
+
+  .explore-card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .explore-card-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .explore-card-body {
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  /* ── Responsive ──────────────────────────────────────────────────── */
+  @media (max-width: 1100px) {
+    .vitals-row {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .recovery-perf-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .recovery-trends-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .vitals-row {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .explore-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .vitals-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block hero %}
+  {{ hero(
+      image='recovery.jpg',
+      title='Recovery Overview',
+      summary=hero_summary,
+      score=recovery_score,
+      score_label='Recovery'
+  ) }}
+{% endblock %}
+
+{% block content %}
+
+{# ── Vitals Row ────────────────────────────────────────────────────── #}
+<section class="vitals-row">
+  {% for v in vitals %}
+  <div class="vital-pill">
+    <span class="vital-pill-label">{{ v.label }}</span>
+    <span class="vital-pill-value">
+      {{ v.value }}<span class="vital-pill-unit">{{ v.unit }}</span>
+    </span>
+    {% if v.delta is not none %}
+      <span class="vital-pill-delta delta-{{ v.delta_color }}">
+        {{ "+" if v.delta > 0 }}{{ v.delta }}%
+      </span>
+    {% else %}
+      <span class="vital-pill-delta delta-muted">--</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+{# ── Today's Activity ─────────────────────────────────────────────── #}
+<section>
+  <div class="section-header mt-section">
+    <h3 class="section-title">Yesterday's Activity</h3>
+  </div>
+  <div class="card activity-card">
+    {% if workout %}
+    <div class="activity-card-inner">
+      <div class="activity-icon" style="background: rgba(169, 182, 101, 0.1);">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a9b665" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8a2 2 0 1 1 4 0v8a2 2 0 1 1-4 0V8zM2 8a2 2 0 1 1 4 0v8a2 2 0 1 1-4 0V8z"/>
+          <line x1="6" y1="12" x2="18" y2="12"/>
+        </svg>
+      </div>
+      <div class="activity-details">
+        <div class="activity-title">Workout Session</div>
+        {% if workout.muscle_groups %}
+        <div class="muscle-tags">
+          {% for mg in workout.muscle_groups %}
+            <span class="muscle-tag">{{ mg }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="activity-stats">
+          {% if workout.volume %}
+          <div class="activity-stat">
+            <span class="activity-stat-value">{{ "{:,}".format(workout.volume) }}</span>
+            <span class="activity-stat-label">Volume (lbs)</span>
+          </div>
+          {% endif %}
+          {% if workout.sets %}
+          <div class="activity-stat">
+            <span class="activity-stat-value">{{ workout.sets }}</span>
+            <span class="activity-stat-label">Sets</span>
+          </div>
+          {% endif %}
+          {% if workout.duration %}
+          <div class="activity-stat">
+            <span class="activity-stat-value">{{ workout.duration }}</span>
+            <span class="activity-stat-label">Minutes</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="rest-day-msg">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7daea3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+      <span>Rest day &mdash; no workout recorded yesterday. Recovery is part of the process.</span>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{# ── Recovery Performance ──────────────────────────────────────────── #}
+<section>
+  <div class="section-header mt-section">
+    <h3 class="section-title">Recovery Performance</h3>
+  </div>
+  <div class="recovery-perf-grid">
+    <div class="card perf-chart-card">
+      <h4>30-Day Recovery Score</h4>
+      <div class="perf-chart-wrap">
+        <canvas id="recovery-perf-line"></canvas>
+      </div>
+    </div>
+    <div class="card perf-chart-card">
+      {{ donut(id='recovery-perf', good=donut_good, fair=donut_fair, poor=donut_poor, label='30 Day Overview') }}
+    </div>
+  </div>
+</section>
+
+{# ── Your Trends ───────────────────────────────────────────────────── #}
+<section>
+  <div class="section-header mt-section">
+    <h3 class="section-title">Your Trends</h3>
+  </div>
+  <div class="recovery-trends-grid">
+    {% for t in trends %}
+      {{ trend_card(
+          id=t.id,
+          label=t.label,
+          value=t.value,
+          unit=t.unit,
+          avg_label='30d avg ' ~ (t.avg_30d or '--'),
+          status=t.status,
+          status_color=t.status_color
+      ) }}
+    {% endfor %}
+  </div>
+</section>
+
+{# ── Explore More ──────────────────────────────────────────────────── #}
+<section>
+  <div class="section-header mt-section">
+    <h3 class="section-title">Explore More</h3>
+  </div>
+  <div class="explore-grid">
+    <div class="card explore-card">
+      <div class="explore-card-icon" style="background: rgba(125, 174, 163, 0.1);">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7daea3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+      </div>
+      <div class="explore-card-title">HRV and Recovery</div>
+      <div class="explore-card-body">
+        Heart rate variability reflects your autonomic nervous system balance. Higher HRV
+        generally signals better recovery. Your baseline of 18-24 ms is individual to you
+        &mdash; single-day swings under 15% are normal noise, not a trend.
+      </div>
+    </div>
+    <div class="card explore-card">
+      <div class="explore-card-icon" style="background: rgba(169, 182, 101, 0.1);">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a9b665" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+      </div>
+      <div class="explore-card-title">Recovery Timing</div>
+      <div class="explore-card-body">
+        Most physiological recovery happens during deep sleep and the hours after waking.
+        Scheduling intense training on high-recovery days and lighter work on low-recovery
+        days helps you train harder when your body is ready.
+      </div>
+    </div>
+    <div class="card explore-card">
+      <div class="explore-card-icon" style="background: rgba(211, 134, 155, 0.1);">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d3869b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+      </div>
+      <div class="explore-card-title">Active Recovery</div>
+      <div class="explore-card-body">
+        Light movement on rest days &mdash; walking, stretching, easy cycling &mdash; can
+        boost blood flow and speed recovery without adding training stress. Aim for 20-30
+        minutes of zone 1 activity to support your parasympathetic system.
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='charts.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // ── 30-day recovery score line chart ────────────────────────────
+  var perfLabels = {{ perf_labels | tojson }};
+  var perfScores = {{ perf_scores | tojson }};
+
+  createLineChart('recovery-perf-line', perfLabels, [{
+    label: 'Recovery Score',
+    data: perfScores,
+    borderColor: '#a9b665',
+    backgroundColor: 'rgba(169, 182, 101, 0.1)',
+    fill: true,
+    tension: 0.3,
+    pointRadius: 2,
+    pointHoverRadius: 5,
+    pointBackgroundColor: '#a9b665',
+  }], {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { intersect: false, mode: 'index' },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { maxTicksLimit: 8 },
+      },
+      y: {
+        min: 0,
+        max: 100,
+        ticks: { maxTicksLimit: 5 },
+      },
+    },
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: function(item) {
+            return item.raw !== null ? 'Score: ' + item.raw : 'No data';
+          }
+        }
+      }
+    },
+  });
+
+  // ── Donut chart ─────────────────────────────────────────────────
+  var donutEl = document.getElementById('donut-recovery-perf');
+  if (donutEl) {
+    createDonut(
+      'donut-recovery-perf',
+      parseInt(donutEl.dataset.good),
+      parseInt(donutEl.dataset.fair),
+      parseInt(donutEl.dataset.poor)
+    );
+  }
+
+  // ── Trend sparklines ───────────────────────────────────────────
+  var trends = {{ trends | tojson }};
+  var colorMap = {
+    'sleep_hrv':   '#a9b665',
+    'resting_hr':  '#ea6962',
+  };
+
+  trends.forEach(function(t) {
+    createSparkline('spark-' + t.id, t.sparkline, colorMap[t.id] || '#a9b665');
+  });
+});
+</script>
+{% endblock %}

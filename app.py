@@ -539,6 +539,243 @@ def health():
     )
 
 
+@app.route("/recovery")
+def recovery():
+    now = datetime.now(LOCAL_TZ)
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+    week_start = today - timedelta(days=6)
+
+    conn = get_db()
+    try:
+        # ── Baselines ──────────────────────────────────────────────
+        baselines = fetch_baselines(conn, today)
+
+        # ── Recovery score ─────────────────────────────────────────
+        recovery_result = compute_recovery_score(conn, today, baselines)
+        recovery_score = recovery_result.get("score") or 0
+
+        # ── Hero summary ───────────────────────────────────────────
+        hero_summary = None
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT content FROM insights WHERE date = %s AND type = 'recovery' LIMIT 1",
+                (today,),
+            )
+            row = cur.fetchone()
+            if row:
+                hero_summary = row["content"]
+
+        if not hero_summary:
+            hero_summary = generate_hero_summary(
+                "recovery", recovery_score, recovery_result.get("components", {}),
+            )
+
+        # ── Vitals row (5 metrics with delta vs baseline) ──────────
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT hrv_nightly_avg, resting_hr, respiration_avg,
+                       body_battery_eod, spo2_avg
+                FROM daily_log
+                WHERE date = %s
+            """, (today,))
+            today_row = cur.fetchone()
+
+        vital_defs = [
+            ("HRV",              "hrv_nightly_avg",  "ms",   True,  "hrv_avg"),
+            ("Resting HR",       "resting_hr",       "bpm",  False, "resting_hr_avg"),
+            ("Respiratory Rate", "respiration_avg",   "brpm", False, "respiration_avg_val"),
+            ("Body Battery",     "body_battery_eod",  "",    True,  "body_battery_avg"),
+            ("SpO2",             "spo2_avg",          "%",   True,  "spo2_avg_val"),
+        ]
+
+        vitals = []
+        for label, col, unit, higher_is_better, baseline_key in vital_defs:
+            current = None
+            if today_row and today_row.get(col) is not None:
+                current = float(today_row[col])
+
+            baseline_val = baselines.get(baseline_key)
+
+            # Compute delta percentage
+            delta = None
+            if current is not None and baseline_val and baseline_val != 0:
+                delta = round(((current - baseline_val) / baseline_val) * 100, 1)
+
+            # Delta color: green if favorable, amber/red if not
+            delta_color = "muted"
+            if delta is not None:
+                if higher_is_better:
+                    delta_color = "green" if delta >= 0 else ("amber" if delta > -10 else "red")
+                else:
+                    delta_color = "green" if delta <= 0 else ("amber" if delta < 10 else "red")
+
+            # Format current value
+            if current is not None:
+                if col in ("hrv_nightly_avg", "resting_hr"):
+                    display_val = f"{current:.0f}"
+                elif col == "spo2_avg":
+                    display_val = f"{current:.1f}"
+                elif col == "body_battery_eod":
+                    display_val = f"{current:.0f}"
+                elif col == "respiration_avg":
+                    display_val = f"{current:.1f}"
+                else:
+                    display_val = f"{current:.1f}"
+            else:
+                display_val = "--"
+
+            vitals.append({
+                "label": label,
+                "value": display_val,
+                "unit": unit,
+                "delta": delta,
+                "delta_color": delta_color,
+            })
+
+        # ── Today's Activity (yesterday's workout data) ────────────
+        workout = None
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT hevy_session_count, hevy_total_volume_lbs,
+                       hevy_total_sets, hevy_session_duration_min,
+                       hevy_muscle_groups
+                FROM daily_log
+                WHERE date = %s
+            """, (yesterday,))
+            activity_row = cur.fetchone()
+
+        if activity_row and activity_row.get("hevy_session_count") and int(activity_row["hevy_session_count"]) > 0:
+            muscles_raw = activity_row.get("hevy_muscle_groups") or []
+            if isinstance(muscles_raw, str):
+                muscles_raw = [m.strip() for m in muscles_raw.strip("{}").split(",") if m.strip()]
+            muscles = [m for m in muscles_raw if m]
+
+            workout = {
+                "muscle_groups": muscles,
+                "volume": round(float(activity_row.get("hevy_total_volume_lbs") or 0)),
+                "sets": int(activity_row.get("hevy_total_sets") or 0),
+                "duration": int(activity_row.get("hevy_session_duration_min") or 0),
+            }
+
+        # ── 30-day Recovery Performance (line chart + donut) ───────
+        perf_labels = []
+        perf_scores = []
+        for i in range(29, -1, -1):
+            d = today - timedelta(days=i)
+            perf_labels.append(d.strftime("%-m/%-d"))
+            try:
+                bl = fetch_baselines(conn, d)
+                result = compute_recovery_score(conn, d, bl)
+                s = result.get("score")
+                perf_scores.append(s if s is not None else None)
+            except Exception:
+                perf_scores.append(None)
+
+        donut_counts = classify_30_days(conn, today, "recovery")
+
+        # ── Trend cards: Sleep HRV and Resting HR ──────────────────
+        trend_defs = [
+            ("sleep_hrv",   "hrv_nightly_avg", "Sleep HRV",   "ms",  True,  "hrv_avg",        "hrv_std"),
+            ("resting_hr",  "resting_hr",      "Resting HR",  "bpm", False, "resting_hr_avg", "resting_hr_std"),
+        ]
+
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT date, hrv_nightly_avg, resting_hr
+                FROM daily_log
+                WHERE date >= %s AND date <= %s
+                ORDER BY date ASC
+            """, (week_start, today))
+            spark_rows = cur.fetchall()
+
+        spark_data = {}
+        for r in spark_rows:
+            spark_data[r["date"]] = r
+
+        # Compute 30-day averages for the trend cards
+        month_start = today - timedelta(days=29)
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT AVG(hrv_nightly_avg) AS hrv_30d,
+                       AVG(resting_hr) AS rhr_30d
+                FROM daily_log
+                WHERE date >= %s AND date <= %s
+            """, (month_start, today))
+            avg_30d_row = cur.fetchone()
+
+        hrv_30d_avg = float(avg_30d_row["hrv_30d"]) if avg_30d_row and avg_30d_row.get("hrv_30d") else None
+        rhr_30d_avg = float(avg_30d_row["rhr_30d"]) if avg_30d_row and avg_30d_row.get("rhr_30d") else None
+
+        trends = []
+        for key, col, label, unit, higher_is_better, baseline_key, std_key in trend_defs:
+            sparkline = []
+            current = None
+            for i in range(7):
+                d = week_start + timedelta(days=i)
+                row = spark_data.get(d)
+                val = None
+                if row and row.get(col) is not None:
+                    val = float(row[col])
+                sparkline.append(val if val is not None else 0)
+                if d == today or (d == yesterday and current is None):
+                    if val is not None and val != 0:
+                        current = val
+
+            baseline_val = baselines.get(baseline_key)
+            std_val = baselines.get(std_key)
+            status_text, _ = _metric_status(current, baseline_val, std_val, higher_is_better)
+
+            pill_class = "normal"
+            if status_text == "Above":
+                pill_class = "above"
+            elif status_text == "Below":
+                pill_class = "below"
+            elif status_text == "No data":
+                pill_class = "below"
+
+            # 30-day avg display
+            avg_30 = None
+            if key == "sleep_hrv" and hrv_30d_avg is not None:
+                avg_30 = f"{hrv_30d_avg:.0f}"
+            elif key == "resting_hr" and rhr_30d_avg is not None:
+                avg_30 = f"{rhr_30d_avg:.0f}"
+
+            if current is not None:
+                display_val = f"{current:.0f}"
+            else:
+                display_val = "--"
+
+            trends.append({
+                "id": key,
+                "label": label,
+                "value": display_val,
+                "unit": unit,
+                "sparkline": sparkline,
+                "avg_30d": avg_30,
+                "status": status_text,
+                "status_color": pill_class,
+            })
+
+    finally:
+        conn.close()
+
+    return render_template(
+        "recovery.html",
+        active_page="recovery",
+        recovery_score=recovery_score,
+        hero_summary=hero_summary,
+        vitals=vitals,
+        workout=workout,
+        perf_labels=perf_labels,
+        perf_scores=perf_scores,
+        donut_good=donut_counts["good"],
+        donut_fair=donut_counts["fair"],
+        donut_poor=donut_counts["poor"],
+        trends=trends,
+    )
+
+
 @app.route("/sleep")
 def sleep():
     now = datetime.now(LOCAL_TZ)
