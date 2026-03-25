@@ -40,6 +40,17 @@ def get_db():
     return conn
 
 
+def _truncate_summary(text, max_sentences=2):
+    """Truncate text to first N sentences for hero banners."""
+    if not text:
+        return text
+    sentences = text.replace(".\n", ". ").split(". ")
+    truncated = ". ".join(sentences[:max_sentences])
+    if not truncated.endswith("."):
+        truncated += "."
+    return truncated
+
+
 # ── Template helpers ────────────────────────────────────────────────
 
 @app.template_filter("md")
@@ -119,7 +130,7 @@ def home():
             )
             row = cur.fetchone()
             if row:
-                daily_summary = row["content"]
+                daily_summary = _truncate_summary(row["content"])
 
         if not daily_summary:
             daily_summary = generate_hero_summary(
@@ -355,7 +366,7 @@ def health():
             )
             row = cur.fetchone()
             if row:
-                daily_summary = row["content"]
+                daily_summary = _truncate_summary(row["content"])
 
         if not daily_summary:
             # Try yesterday
@@ -366,7 +377,7 @@ def health():
                 )
                 row = cur.fetchone()
                 if row:
-                    daily_summary = row["content"]
+                    daily_summary = _truncate_summary(row["content"])
 
         if not daily_summary:
             daily_summary = generate_hero_summary(
@@ -380,27 +391,30 @@ def health():
                 },
             )
 
-        # ── Insight chips (most recent 2 daily insights) ──────────
+        # ── Insight chip (1 chip, different from hero text) ──────────
         insight_chips = []
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT content FROM insights
                 WHERE type = 'daily'
                 ORDER BY date DESC
-                LIMIT 2
+                LIMIT 3
             """)
             for row in cur.fetchall():
                 content = row["content"] or ""
-                # First sentence only
                 first_sentence = content.split(". ")[0]
                 if first_sentence and not first_sentence.endswith("."):
                     first_sentence += "."
+                # Skip if it's the same text used in the hero
+                if daily_summary and first_sentence in daily_summary:
+                    continue
                 insight_chips.append(first_sentence)
+                if len(insight_chips) >= 1:
+                    break
 
         # ── Vital Trends (7-day sparkline + current + 90d avg + status) ──
         vital_metrics = [
             ("hrv",       "hrv_nightly_avg", "Heart Rate Variability", "ms",   True,  "hrv_avg",         "hrv_std"),
-            ("spo2",      "spo2_avg",        "SpO2",                   "%",    True,  "spo2_avg_val",    "spo2_std"),
             ("rhr",       "resting_hr",      "Resting Heart Rate",     "bpm",  False, "resting_hr_avg",  "resting_hr_std"),
             ("resp",      "respiration_avg", "Respiratory Rate",       "brpm", False, "respiration_avg_val", "respiration_std"),
             ("steps",     "steps",           "Steps",                  "",     True,  "steps_avg",       "steps_std"),
@@ -408,7 +422,7 @@ def health():
 
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT date, hrv_nightly_avg, spo2_avg, resting_hr,
+                SELECT date, hrv_nightly_avg, resting_hr,
                        respiration_avg, steps
                 FROM daily_log
                 WHERE date >= %s AND date <= %s
@@ -445,10 +459,6 @@ def health():
                     avg_display = f"{int(baseline_val):,}"
                 elif key in ("hrv", "rhr"):
                     avg_display = f"{baseline_val:.0f}"
-                elif key == "spo2":
-                    avg_display = f"{baseline_val:.1f}"
-                elif key == "resp":
-                    avg_display = f"{baseline_val:.1f}"
                 else:
                     avg_display = f"{baseline_val:.1f}"
 
@@ -469,10 +479,6 @@ def health():
                     display_val = f"{int(current):,}"
                 elif key in ("hrv", "rhr"):
                     display_val = f"{current:.0f}"
-                elif key == "spo2":
-                    display_val = f"{current:.1f}"
-                elif key == "resp":
-                    display_val = f"{current:.1f}"
                 else:
                     display_val = f"{current:.1f}"
             else:
@@ -569,7 +575,7 @@ def recovery():
             )
             row = cur.fetchone()
             if row:
-                hero_summary = row["content"]
+                hero_summary = _truncate_summary(row["content"])
 
         if not hero_summary:
             hero_summary = generate_hero_summary(
@@ -802,7 +808,7 @@ def training():
             )
             row = cur.fetchone()
             if row:
-                hero_summary = row["content"]
+                hero_summary = _truncate_summary(row["content"])
 
         if not hero_summary:
             with conn.cursor() as cur:
@@ -812,7 +818,7 @@ def training():
                 )
                 row = cur.fetchone()
                 if row:
-                    hero_summary = row["content"]
+                    hero_summary = _truncate_summary(row["content"])
 
         if not hero_summary:
             hero_summary = generate_hero_summary(
@@ -1063,7 +1069,7 @@ def sleep():
             )
             row = cur.fetchone()
             if row:
-                hero_summary = row["content"]
+                hero_summary = _truncate_summary(row["content"])
 
         if not hero_summary:
             hero_summary = generate_hero_summary(

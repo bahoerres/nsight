@@ -210,6 +210,7 @@ h4 { font-size: 1rem; }
 
 .page-content {
   max-width: var(--content-max);
+  margin: 0 auto;
   padding: var(--section-gap) 40px;
 }
 
@@ -267,10 +268,15 @@ h4 { font-size: 1rem; }
   max-width: 600px;
   line-height: 1.5;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .hero-score {
   flex-shrink: 0;
+  padding-right: 16px;
 }
 
 /* ── Score Circle ───────────────────────────────────────────────── */

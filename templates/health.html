@@ -18,8 +18,8 @@
     display: flex;
     justify-content: center;
     gap: 12px;
-    flex-wrap: wrap;
-    max-width: 640px;
+    flex-wrap: nowrap;
+    max-width: 720px;
     margin: 0 auto;
   }
 
@@ -123,7 +123,7 @@
   /* ── Vital Trends Grid ───────────────────────────────────────── */
   .vitals-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 20px;
     margin-top: var(--section-gap);
   }
