@@ -124,9 +124,31 @@ def fetch_baselines(conn, target_date):
             STDDEV(spo2_avg)                AS spo2_std,
             AVG(respiration_avg)            AS respiration_avg_val,
             STDDEV(respiration_avg)         AS respiration_std,
+            AVG(sleep_rem_sec)              AS sleep_rem_avg,
+            STDDEV(sleep_rem_sec)           AS sleep_rem_std,
+            AVG(sleep_light_sec)            AS sleep_light_avg,
+            STDDEV(sleep_light_sec)         AS sleep_light_std,
+            AVG(CASE WHEN sleep_total_sec > 0 AND sleep_awake_sec IS NOT NULL
+                THEN sleep_total_sec + sleep_awake_sec END)   AS tib_avg,
+            STDDEV(CASE WHEN sleep_total_sec > 0 AND sleep_awake_sec IS NOT NULL
+                THEN sleep_total_sec + sleep_awake_sec END)   AS tib_std,
+            AVG(CASE WHEN sleep_total_sec > 0 AND sleep_awake_sec IS NOT NULL
+                THEN (sleep_total_sec - sleep_awake_sec)::float
+                     / sleep_total_sec * 100 END)             AS efficiency_avg,
+            STDDEV(CASE WHEN sleep_total_sec > 0 AND sleep_awake_sec IS NOT NULL
+                THEN (sleep_total_sec - sleep_awake_sec)::float
+                     / sleep_total_sec * 100 END)             AS efficiency_std,
+            AVG(EXTRACT(EPOCH FROM (sleep_end AT TIME ZONE 'America/Chicago'))::BIGINT %% 86400)
+                                                              AS sleep_end_avg_sec,
+            STDDEV(EXTRACT(EPOCH FROM (sleep_end AT TIME ZONE 'America/Chicago'))::BIGINT %% 86400)
+                                                              AS sleep_end_std_sec,
             PERCENTILE_CONT(0.5) WITHIN GROUP (
                 ORDER BY EXTRACT(EPOCH FROM (sleep_start AT TIME ZONE 'America/Chicago'))::BIGINT %% 86400
-            ) AS median_sleep_start_sec
+            ) AS median_sleep_start_sec,
+            AVG(EXTRACT(EPOCH FROM (sleep_start AT TIME ZONE 'America/Chicago'))::BIGINT %% 86400)
+                                                              AS sleep_start_avg_sec,
+            STDDEV(EXTRACT(EPOCH FROM (sleep_start AT TIME ZONE 'America/Chicago'))::BIGINT %% 86400)
+                                                              AS sleep_start_std_sec
         FROM daily_log
         WHERE date >= %s
           AND date < %s
@@ -151,6 +173,19 @@ def fetch_baselines(conn, target_date):
         result["median_sleep_start_hour"] = med_sec / 3600.0
     else:
         result["median_sleep_start_hour"] = None
+
+    # Convert sleep start/end avg/std from seconds to fractional hours
+    for prefix in ("sleep_start", "sleep_end"):
+        avg_key = f"{prefix}_avg_sec"
+        std_key = f"{prefix}_std_sec"
+        if result.get(avg_key) is not None:
+            result[f"{prefix}_avg_hr"] = result[avg_key] / 3600.0
+        else:
+            result[f"{prefix}_avg_hr"] = None
+        if result.get(std_key) is not None:
+            result[f"{prefix}_std_hr"] = result[std_key] / 3600.0
+        else:
+            result[f"{prefix}_std_hr"] = None
 
     return result
 

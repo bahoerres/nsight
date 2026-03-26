@@ -1160,16 +1160,16 @@ def sleep():
         trend_metrics = [
             ("total_sleep",    "sleep_total_sec",   "Total Sleep",      "hrs",  True,  "sleep_total_avg",        "sleep_total_std",        "sec_to_hrs"),
             ("deep_sleep",     "sleep_deep_sec",    "Deep Sleep",       "hrs",  True,  "sleep_deep_avg",         "sleep_deep_std",         "sec_to_hrs"),
-            ("rem_sleep",      "sleep_rem_sec",     "REM Sleep",        "hrs",  True,  None,                     None,                     "sec_to_hrs"),
+            ("rem_sleep",      "sleep_rem_sec",     "REM Sleep",        "hrs",  True,  "sleep_rem_avg",          "sleep_rem_std",          "sec_to_hrs"),
             ("sleep_score",    None,                "Sleep Score",      "",     True,  None,                     None,                     "score"),
-            ("time_in_bed",    None,                "Time in Bed",      "hrs",  True,  None,                     None,                     "tib"),
-            ("light_sleep",    "sleep_light_sec",   "Light Sleep",      "hrs",  False, None,                     None,                     "sec_to_hrs"),
-            ("efficiency",     None,                "Sleep Efficiency", "%",    True,  None,                     None,                     "eff"),
+            ("time_in_bed",    None,                "Time in Bed",      "hrs",  True,  "tib_avg",                "tib_std",                "tib"),
+            ("light_sleep",    "sleep_light_sec",   "Light Sleep",      "hrs",  False, "sleep_light_avg",        "sleep_light_std",        "sec_to_hrs"),
+            ("efficiency",     None,                "Sleep Efficiency", "%",    True,  "efficiency_avg",         "efficiency_std",         "eff"),
             ("sleep_hrv",      "hrv_nightly_avg",   "Sleep HRV",        "ms",   True,  "hrv_avg",                "hrv_std",                "raw"),
             ("resp_rate",      "respiration_avg",   "Respiratory Rate", "brpm", False, "respiration_avg_val",    "respiration_std",        "raw"),
             ("resting_hr",     "resting_hr",        "Resting HR",       "bpm",  False, "resting_hr_avg",         "resting_hr_std",         "raw"),
-            ("sleep_start",    "sleep_start",       "Sleep Start",      "",     False, None,                     None,                     "time_start"),
-            ("sleep_end",      "sleep_end",         "Sleep End",        "",     False, None,                     None,                     "time_end"),
+            ("sleep_start",    "sleep_start",       "Sleep Start",      "",     False, "sleep_start_avg_hr",     "sleep_start_std_hr",     "time_start"),
+            ("sleep_end",      "sleep_end",         "Sleep End",        "",     False, "sleep_end_avg_hr",       "sleep_end_std_hr",       "time_end"),
         ]
 
         # Fetch 7-day data for sparklines
@@ -1249,6 +1249,8 @@ def sleep():
             # Convert baseline for sec_to_hrs metrics
             if transform == "sec_to_hrs" and baseline_val is not None:
                 baseline_val_display = baseline_val / 3600.0
+            elif transform == "tib" and baseline_val is not None:
+                baseline_val_display = baseline_val / 3600.0
             elif transform == "raw":
                 baseline_val_display = baseline_val
             else:
@@ -1257,8 +1259,17 @@ def sleep():
             # Format avg display
             avg_display = None
             if baseline_val_display is not None:
-                if transform == "sec_to_hrs":
+                if transform in ("sec_to_hrs", "tib"):
                     avg_display = f"{baseline_val_display:.1f}"
+                elif transform == "eff":
+                    avg_display = f"{baseline_val_display:.0f}"
+                elif transform in ("time_start", "time_end"):
+                    # Convert fractional hours to readable time
+                    h = int(baseline_val_display) % 24
+                    m = int((baseline_val_display % 1) * 60)
+                    period = "AM" if h < 12 else "PM"
+                    display_h = h % 12 or 12
+                    avg_display = f"{display_h}:{m:02d} {period}"
                 elif key in ("sleep_hrv", "resting_hr"):
                     avg_display = f"{baseline_val_display:.0f}"
                 elif key == "resp_rate":
@@ -1274,6 +1285,13 @@ def sleep():
 
             if transform == "sec_to_hrs" and current_for_status is not None:
                 current_for_status = current_for_status * 3600  # back to seconds
+            elif transform == "tib" and current_for_status is not None:
+                current_for_status = current_for_status * 3600  # back to seconds
+            elif transform == "time_start" and current_for_status is not None:
+                # Sparkline uses negative hours for PM (e.g. -2 = 10 PM)
+                # Baseline is in 24h fractional hours (e.g. 22.0)
+                if current_for_status < 0:
+                    current_for_status = current_for_status + 24  # e.g. -2 → 22
             status_text, status_color = _metric_status(current_for_status, baseline_for_status, std_for_status, higher_is_better)
 
             # Map status color to pill CSS class
