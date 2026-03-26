@@ -1161,7 +1161,7 @@ def sleep():
             ("total_sleep",    "sleep_total_sec",   "Total Sleep",      "hrs",  True,  "sleep_total_avg",        "sleep_total_std",        "sec_to_hrs"),
             ("deep_sleep",     "sleep_deep_sec",    "Deep Sleep",       "hrs",  True,  "sleep_deep_avg",         "sleep_deep_std",         "sec_to_hrs"),
             ("rem_sleep",      "sleep_rem_sec",     "REM Sleep",        "hrs",  True,  "sleep_rem_avg",          "sleep_rem_std",          "sec_to_hrs"),
-            ("sleep_score",    None,                "Sleep Score",      "",     True,  None,                     None,                     "score"),
+            ("sleep_score",    None,                "Sleep Score",      "",     True,  "nsight_sleep_avg",       "nsight_sleep_std",       "score"),
             ("time_in_bed",    None,                "Time in Bed",      "hrs",  True,  "tib_avg",                "tib_std",                "tib"),
             ("light_sleep",    "sleep_light_sec",   "Light Sleep",      "hrs",  False, "sleep_light_avg",        "sleep_light_std",        "sec_to_hrs"),
             ("efficiency",     None,                "Sleep Efficiency", "%",    True,  "efficiency_avg",         "efficiency_std",         "eff"),

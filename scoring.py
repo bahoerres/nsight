@@ -96,6 +96,8 @@ def fetch_baselines(conn, target_date):
     """
     sql = """
         SELECT
+            AVG(nsight_sleep_score)         AS nsight_sleep_avg,
+            STDDEV(nsight_sleep_score)      AS nsight_sleep_std,
             AVG(sleep_total_sec)            AS sleep_total_avg,
             STDDEV(sleep_total_sec)         AS sleep_total_std,
             AVG(sleep_deep_sec)             AS sleep_deep_avg,
@@ -1009,3 +1011,63 @@ def generate_hero_summary(category, score, data):
 
     # Fallback
     return f"Score: {score}."
+
+
+# ---------------------------------------------------------------------------
+# Score materialization
+# ---------------------------------------------------------------------------
+
+
+def materialize_scores(conn, target_date):
+    """
+    Compute all category scores for *target_date* and upsert them into
+    daily_log.  Idempotent — safe to re-run.
+
+    Columns written:
+      nsight_sleep_score, nsight_recovery_score,
+      nsight_training_score, nsight_nutrition_score, nsight_overall_score
+    """
+    baselines = fetch_baselines(conn, target_date)
+    sleep_result = compute_sleep_score(conn, target_date, baselines)
+    recovery_result = compute_recovery_score(conn, target_date, baselines)
+    training_result = compute_training_score(conn, target_date)
+    nutrition_result = compute_nutrition_score(conn, target_date)
+    overall = compute_overall_score(sleep_result, recovery_result,
+                                    training_result, nutrition_result)
+
+    scores = {
+        "nsight_sleep_score":     sleep_result.get("score"),
+        "nsight_recovery_score":  recovery_result.get("score"),
+        "nsight_training_score":  training_result.get("score"),
+        "nsight_nutrition_score": nutrition_result.get("score"),
+        "nsight_overall_score":   overall,
+    }
+
+    cols = [k for k, v in scores.items()]
+    vals = [scores[k] for k in cols]
+    set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in cols)
+    placeholders = ", ".join(["%s"] * len(cols))
+
+    sql = f"""
+        INSERT INTO daily_log (date, {', '.join(cols)})
+        VALUES (%s, {placeholders})
+        ON CONFLICT (date) DO UPDATE SET {set_clause}, updated_at = now()
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, [target_date] + vals)
+    conn.commit()
+    return scores
+
+
+def backfill_scores(conn, days=365):
+    """Materialize scores for the last *days* days."""
+    today = date.today()
+    count = 0
+    for i in range(days, -1, -1):
+        d = today - timedelta(days=i)
+        try:
+            materialize_scores(conn, d)
+            count += 1
+        except Exception as e:
+            print(f"  skip {d}: {e}")
+    return count
