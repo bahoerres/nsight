@@ -216,6 +216,7 @@ def home():
                 weekly_steps.append(0)
 
         # ── Trends (7-day sparklines + current value + delta) ──────
+        trend_start = today - timedelta(days=6)
         trends = {}
         trend_metrics = [
             ("hrv", "hrv_nightly_avg", "ms", True),
@@ -233,7 +234,7 @@ def home():
                 FROM daily_log
                 WHERE date >= %s AND date <= %s
                 ORDER BY date ASC
-            """, (week_start, today))
+            """, (trend_start, today))
             trend_rows = cur.fetchall()
 
         trend_data = {}
@@ -247,7 +248,7 @@ def home():
             sparkline = []
             current = None
             for i in range(7):
-                d = week_start + timedelta(days=i)
+                d = trend_start + timedelta(days=i)
                 row = trend_data.get(d)
                 val = None
                 if row and row.get(col) is not None:
