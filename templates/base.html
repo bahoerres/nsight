@@ -126,21 +126,6 @@
     </div>
   </nav>
 
-  <!-- Page arrows (desktop) -->
-  {%- set nav_pages = [
-    ('/', 'home'), ('/health', 'health'), ('/sleep', 'sleep'),
-    ('/recovery', 'recovery'), ('/training', 'training'), ('/nutrition', 'nutrition'),
-    ('/checkin', 'checkin'), ('/insights', 'insights'), ('/correlations', 'correlations')
-  ] -%}
-  {%- set ns = namespace(idx=0) -%}
-  {%- for path, name in nav_pages -%}
-    {%- if name == active_page %}{% set ns.idx = loop.index0 %}{% endif -%}
-  {%- endfor -%}
-  {%- set prev = nav_pages[(ns.idx - 1) % nav_pages|length] -%}
-  {%- set next = nav_pages[(ns.idx + 1) % nav_pages|length] -%}
-  <a href="{{ prev[0] }}" class="page-arrow page-arrow--left" aria-label="Previous: {{ prev[1] | title }}">&lsaquo;</a>
-  <a href="{{ next[0] }}" class="page-arrow page-arrow--right" aria-label="Next: {{ next[1] | title }}">&rsaquo;</a>
-
   <!-- Main content -->
   <main class="main">
     {% block hero %}{% endblock %}
