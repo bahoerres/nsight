@@ -499,9 +499,10 @@ document.addEventListener('DOMContentLoaded', function() {
   var weeklySteps = {{ weekly_steps | tojson }};
 
   var weeklyDateLabels = {{ weekly_date_labels | tojson }};
-  createWeeklyChart('chart-weekly-hr',    weeklyHR,    'Avg HR (bpm)',   '#ea6962', weeklyDateLabels);
-  createWeeklyChart('chart-weekly-sleep',  weeklySleep, 'Sleep (hrs)',    '#7daea3', weeklyDateLabels);
-  createWeeklyChart('chart-weekly-steps',  weeklySteps, 'Steps',          '#a9b665', weeklyDateLabels);
+  var weeklyAxisLabels = {{ weekly_labels | tojson }};
+  createWeeklyChart('chart-weekly-hr',    weeklyHR,    'Avg HR (bpm)',   '#ea6962', weeklyDateLabels, weeklyAxisLabels);
+  createWeeklyChart('chart-weekly-sleep',  weeklySleep, 'Sleep (hrs)',    '#7daea3', weeklyDateLabels, weeklyAxisLabels);
+  createWeeklyChart('chart-weekly-steps',  weeklySteps, 'Steps',          '#a9b665', weeklyDateLabels, weeklyAxisLabels);
 
   // ── Trend Sparklines ────────────────────────────────────────
   var trends = {{ trends | tojson }};

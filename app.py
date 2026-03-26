@@ -176,9 +176,10 @@ def home():
                     "hevy_url": f"https://hevy.com/workout/{session_id}" if session_id else None,
                 })
 
-        # ── Weekly charts (7-day data) ─────────────────────────────
-        week_start = today - timedelta(days=6)
-        weekly_labels = []  # Day-of-week labels
+        # ── Weekly charts (past 7 complete days, ending yesterday) ──
+        week_end = yesterday
+        week_start = week_end - timedelta(days=6)
+        weekly_labels = []  # Day-of-week labels for x-axis
         weekly_hr = []
         weekly_sleep = []
         weekly_steps = []
@@ -189,7 +190,7 @@ def home():
                 FROM daily_log
                 WHERE date >= %s AND date <= %s
                 ORDER BY date ASC
-            """, (week_start, today))
+            """, (week_start, week_end))
             rows = cur.fetchall()
 
         # Build a dict keyed by date for easy lookup
