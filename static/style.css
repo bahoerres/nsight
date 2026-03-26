@@ -316,18 +316,19 @@ h4 { font-size: 1rem; }
 }
 
 .score-circle-wrap {
-  position: relative;
-  display: inline-block;
+  display: grid;
+  place-items: center;
+}
+
+.score-circle-wrap > * {
+  grid-area: 1 / 1;
 }
 
 .score-number {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
   letter-spacing: -0.04em;
+  z-index: 1;
 }
 
 .score-label {
