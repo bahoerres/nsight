@@ -66,7 +66,7 @@ function createSparkline(canvasId, data, color) {
 /**
  * Weekly bar chart with day-of-week labels ['M','T','W','T','F','S','S'].
  */
-function createWeeklyChart(canvasId, data, label, color) {
+function createWeeklyChart(canvasId, data, label, color, dateLabels) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return null;
 
@@ -94,6 +94,9 @@ function createWeeklyChart(canvasId, data, label, color) {
         tooltip: {
           callbacks: {
             title: (items) => {
+              if (dateLabels && dateLabels[items[0].dataIndex]) {
+                return dateLabels[items[0].dataIndex];
+              }
               const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
               return dayNames[items[0].dataIndex] || '';
             }

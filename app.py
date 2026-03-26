@@ -198,9 +198,11 @@ def home():
             daily_data[r["date"]] = r
 
         day_abbrev = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+        weekly_date_labels = []   # full date strings for tooltips
         for i in range(7):
             d = week_start + timedelta(days=i)
             weekly_labels.append(day_abbrev[d.weekday()])
+            weekly_date_labels.append(d.strftime("%a %-m/%-d"))
             row = daily_data.get(d)
             if row:
                 weekly_hr.append(float(row["resting_hr"]) if row.get("resting_hr") else 0)
@@ -237,6 +239,9 @@ def home():
         for r in trend_rows:
             trend_data[r["date"]] = r
 
+        # Metrics that accumulate during the day — prefer yesterday's final value
+        accumulating = {"steps", "calories"}
+
         for key, col, unit, higher_is_better in trend_metrics:
             sparkline = []
             current = None
@@ -250,9 +255,18 @@ def home():
                     if col == "sleep_total_sec":
                         val = round(val / 3600.0, 1)
                 sparkline.append(val if val is not None else 0)
-                if d == today or (d == yesterday and current is None):
-                    if val is not None and val != 0:
-                        current = val
+                if key in accumulating:
+                    # For accumulating metrics, prefer yesterday's complete value
+                    if d == yesterday:
+                        if val is not None and val != 0:
+                            current = val
+                    elif d == today and current is None:
+                        if val is not None and val != 0:
+                            current = val
+                else:
+                    if d == today or (d == yesterday and current is None):
+                        if val is not None and val != 0:
+                            current = val
 
             # Compute delta vs baseline
             baseline_key = {
@@ -334,6 +348,7 @@ def home():
         nutrition_score=nutrition_score or 0,
         recent_workouts=recent_workouts,
         weekly_labels=weekly_labels,
+        weekly_date_labels=weekly_date_labels,
         weekly_hr=weekly_hr,
         weekly_sleep=weekly_sleep,
         weekly_steps=weekly_steps,
