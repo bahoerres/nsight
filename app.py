@@ -1793,6 +1793,7 @@ def build_scores(data: dict) -> dict:
         "fatigue": (fatigue_score, fatigue_ctx),
         "hunger": (7, "no signal \u2014 log more Cronometer data"),
         "digestion": (7, "no signal"),
+        "weight": (None, ""),  # populated by checkin route with actual weight
     }
 
 
@@ -1959,6 +1960,21 @@ def checkin(days: int = 14):
     scores = build_scores(data)
     flags = build_flags(data, scores)
     narrative = build_narrative(data, scores)
+
+    # Populate weight score with actual data
+    # Target: 225-230 lbs (mass phase)
+    if data["period"].get("last_weight"):
+        w = float(data["period"]["last_weight"])
+        if 225 <= w <= 230:
+            scores["weight"] = (8, f"{w:.1f} lbs — in target range")
+        elif w > 230:
+            scores["weight"] = (7, f"{w:.1f} lbs — above 230 target")
+        elif w >= 220:
+            scores["weight"] = (7, f"{w:.1f} lbs — approaching 225 target")
+        else:
+            scores["weight"] = (6, f"{w:.1f} lbs — below 225 target")
+    else:
+        scores["weight"] = (7, "no recent weigh-in")
 
     # Most recent weekly insight
     weekly_insight = None

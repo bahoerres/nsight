@@ -488,7 +488,7 @@
     <div class="scores-grid">
       {% for metric, (score, ctx) in scores.items() %}
         <div class="score-rec-card">
-          <div class="score-rec-number {% if score >= 8 %}score-high{% elif score >= 6 %}score-mid{% else %}score-low{% endif %}">{{ score }}</div>
+          <div class="score-rec-number {% if score is none %}score-mid{% elif score >= 8 %}score-high{% elif score >= 6 %}score-mid{% else %}score-low{% endif %}">{{ score if score is not none else '--' }}</div>
           <div class="score-rec-body">
             <div class="score-rec-label">{{ metric | replace('_', ' ') }}</div>
             <div class="score-rec-ctx">{{ ctx }}</div>
