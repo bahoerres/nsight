@@ -464,14 +464,14 @@ def health():
 
             # Status pill via _metric_status
             status_text, status_color = _metric_status(current, baseline_val, std_val, higher_is_better)
-            # Map status text to CSS pill classes (pill-normal, pill-above, pill-below)
-            pill_class = "normal"
-            if status_text == "Above":
-                pill_class = "above"
-            elif status_text == "Below":
+            if status_color == "green":
+                pill_class = "normal"
+            elif status_color == "amber":
+                pill_class = "above" if status_text == "Above" else "below"
+            elif status_color == "muted":
                 pill_class = "below"
-            elif status_text == "No data":
-                pill_class = "below"
+            else:
+                pill_class = "normal"
 
             # Format current value
             if current is not None:
@@ -735,15 +735,16 @@ def recovery():
 
             baseline_val = baselines.get(baseline_key)
             std_val = baselines.get(std_key)
-            status_text, _ = _metric_status(current, baseline_val, std_val, higher_is_better)
+            status_text, status_color = _metric_status(current, baseline_val, std_val, higher_is_better)
 
-            pill_class = "normal"
-            if status_text == "Above":
-                pill_class = "above"
-            elif status_text == "Below":
+            if status_color == "green":
+                pill_class = "normal"
+            elif status_color == "amber":
+                pill_class = "above" if status_text == "Above" else "below"
+            elif status_color == "muted":
                 pill_class = "below"
-            elif status_text == "No data":
-                pill_class = "below"
+            else:
+                pill_class = "normal"
 
             # 30-day avg display
             avg_30 = None
@@ -1263,15 +1264,17 @@ def sleep():
 
             if transform == "sec_to_hrs" and current_for_status is not None:
                 current_for_status = current_for_status * 3600  # back to seconds
-            status_text, _ = _metric_status(current_for_status, baseline_for_status, std_for_status, higher_is_better)
+            status_text, status_color = _metric_status(current_for_status, baseline_for_status, std_for_status, higher_is_better)
 
-            pill_class = "normal"
-            if status_text == "Above":
-                pill_class = "above"
-            elif status_text == "Below":
+            # Map status color to pill CSS class
+            if status_color == "green":
+                pill_class = "normal"
+            elif status_color == "amber":
+                pill_class = "above" if status_text == "Above" else "below"
+            elif status_color == "muted":
                 pill_class = "below"
-            elif status_text == "No data":
-                pill_class = "below"
+            else:
+                pill_class = "normal"
 
             # Format current value for display
             if current is not None:
