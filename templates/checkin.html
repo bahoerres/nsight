@@ -161,7 +161,7 @@
 
   .scores-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
     margin-top: 16px;
   }
@@ -453,9 +453,6 @@
           {% endif %}
         </span>
       </div>
-      {% if body_weight %}
-        <div class="weight-badge">{{ body_weight }} lbs <span>current weight</span></div>
-      {% endif %}
     </div>
 
     {# Nutrition card #}
@@ -495,6 +492,19 @@
           </div>
         </div>
       {% endfor %}
+      <div class="score-rec-card">
+        <div class="score-rec-number score-mid">{{ weight_info.current | round(1) if weight_info.current else '--' }}</div>
+        <div class="score-rec-body">
+          <div class="score-rec-label">WEIGHT</div>
+          <div class="score-rec-ctx">
+            {% if weight_info.delta is not none %}
+              {{ '+' if weight_info.delta > 0 else '' }}{{ weight_info.delta }} lbs over {{ weight_info.days_label }}
+            {% else %}
+              no weigh-in data for period
+            {% endif %}
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

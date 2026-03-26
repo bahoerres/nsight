@@ -1861,9 +1861,6 @@ def build_scores(data: dict) -> dict:
         "energy": (energy_score, energy_ctx),
         "stress": (stress_score, stress_ctx),
         "fatigue": (fatigue_score, fatigue_ctx),
-        "hunger": (7, "no signal \u2014 log more Cronometer data"),
-        "digestion": (7, "no signal"),
-        "weight": (None, ""),  # populated by checkin route with actual weight
     }
 
 
@@ -2031,39 +2028,34 @@ def checkin(days: int = 14):
     flags = build_flags(data, scores)
     narrative = build_narrative(data, scores)
 
-    # Populate weight score with actual data
-    # Target: 225-230 lbs (mass phase)
-    if data["period"].get("last_weight"):
-        w = float(data["period"]["last_weight"])
-        if 225 <= w <= 230:
-            scores["weight"] = (8, f"{w:.1f} lbs — in target range")
-        elif w > 230:
-            scores["weight"] = (7, f"{w:.1f} lbs — above 230 target")
-        elif w >= 220:
-            scores["weight"] = (7, f"{w:.1f} lbs — approaching 225 target")
-        else:
-            scores["weight"] = (6, f"{w:.1f} lbs — below 225 target")
-    else:
-        scores["weight"] = (7, "no recent weigh-in")
-
-    # Most recent weekly insight
+    # Weight: current value + delta over selected period
+    weight_info = {"current": None, "delta": None, "days_label": f"{days}d"}
     weekly_insight = None
-    body_weight = None
     try:
         conn2 = get_db()
         cur2 = conn2.cursor()
+        # Latest weight
+        cur2.execute(
+            "SELECT body_weight_lbs FROM daily_log WHERE body_weight_lbs IS NOT NULL ORDER BY date DESC LIMIT 1"
+        )
+        wt_now = cur2.fetchone()
+        if wt_now:
+            weight_info["current"] = float(wt_now["body_weight_lbs"])
+        # Weight at start of selected period
+        cur2.execute(
+            "SELECT body_weight_lbs FROM daily_log WHERE body_weight_lbs IS NOT NULL AND date <= %s ORDER BY date DESC LIMIT 1",
+            (data["period_start"],),
+        )
+        wt_start = cur2.fetchone()
+        if wt_now and wt_start:
+            weight_info["delta"] = round(float(wt_now["body_weight_lbs"]) - float(wt_start["body_weight_lbs"]), 1)
+        # Weekly insight
         cur2.execute(
             "SELECT content FROM insights WHERE type = 'weekly' ORDER BY date DESC LIMIT 1"
         )
         wi_row = cur2.fetchone()
         if wi_row:
             weekly_insight = wi_row["content"]
-        cur2.execute(
-            "SELECT body_weight_lbs FROM daily_log WHERE body_weight_lbs IS NOT NULL ORDER BY date DESC LIMIT 1"
-        )
-        wt_row = cur2.fetchone()
-        if wt_row:
-            body_weight = float(wt_row["body_weight_lbs"])
         conn2.close()
     except Exception:
         pass
@@ -2082,7 +2074,7 @@ def checkin(days: int = 14):
         days=days,
         delta=delta_pct,
         weekly_insight=weekly_insight,
-        body_weight=body_weight,
+        weight_info=weight_info,
     )
 
 
