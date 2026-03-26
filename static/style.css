@@ -315,8 +315,16 @@ h4 { font-size: 1rem; }
   transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.score-circle-wrap {
+  position: relative;
+  display: inline-block;
+}
+
 .score-number {
   position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
   letter-spacing: -0.04em;
@@ -551,12 +559,13 @@ h4 { font-size: 1rem; }
   .hero-inner {
     padding: 60px 20px 24px;  /* top padding clears hamburger */
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: flex-end;
   }
 
   .hero-text {
-    flex: 1;
-    min-width: 0;
+    flex: 1 1 0%;
+    min-width: 60%;
   }
 
   .hero-title { font-size: 1.4rem; }
@@ -564,6 +573,7 @@ h4 { font-size: 1rem; }
   .hero-summary { font-size: 0.8rem; -webkit-line-clamp: 2; }
 
   .hero-score {
+    flex-shrink: 0;
     padding-right: 0;
   }
 

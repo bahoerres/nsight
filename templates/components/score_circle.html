@@ -17,21 +17,21 @@
 {%- endif -%}
 <div class="score-circle">
   {% if href %}<a href="{{ href }}">{% endif %}
-  <svg width="{{ size }}" height="{{ size }}" viewBox="0 0 {{ size }} {{ size }}">
-    <circle class="score-circle-track"
-            cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ radius }}"/>
-    <circle class="score-circle-fill"
-            cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ radius }}"
-            stroke="{{ color }}"
-            stroke-dasharray="{{ circumference }}"
-            stroke-dashoffset="{{ offset }}"/>
-  </svg>
-  <span class="score-number metric-value"
-        style="top: {{ size / 2 - (size * 0.13) }}px; left: 50%;
-               transform: translateX(-50%);
-               font-size: {{ size * 0.3 }}px;">
-    {{ score }}
-  </span>
+  <div class="score-circle-wrap">
+    <svg width="{{ size }}" height="{{ size }}" viewBox="0 0 {{ size }} {{ size }}">
+      <circle class="score-circle-track"
+              cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ radius }}"/>
+      <circle class="score-circle-fill"
+              cx="{{ size / 2 }}" cy="{{ size / 2 }}" r="{{ radius }}"
+              stroke="{{ color }}"
+              stroke-dasharray="{{ circumference }}"
+              stroke-dashoffset="{{ offset }}"/>
+    </svg>
+    <span class="score-number metric-value"
+          style="font-size: {{ size * 0.3 }}px;">
+      {{ score }}
+    </span>
+  </div>
   <span class="score-label">{{ label }}</span>
   {% if href %}</a>{% endif %}
 </div>
