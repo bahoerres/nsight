@@ -33,6 +33,40 @@
     filter: brightness(1.1);
   }
 
+  .weight-mini {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    border-left: 1px solid var(--border-subtle);
+    margin-left: 8px;
+    padding-left: 24px;
+  }
+
+  .weight-mini-value {
+    font-size: 1.5rem;
+    line-height: 1;
+    color: var(--text-primary);
+  }
+
+  .weight-mini-unit {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+
+  .weight-mini-spark {
+    width: 80px;
+    height: 32px;
+  }
+
+  .weight-mini-spark canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
   /* ── Trends Grid (2 rows x 3 cols) ──────────────────────────── */
   .trends-grid {
     display: grid;
@@ -236,6 +270,13 @@
     {{ score_circle(score=recovery_score, label='Recovery', size=100, href='/recovery') }}
     {{ score_circle(score=training_score, label='Training', size=100, href='/training') }}
     {{ score_circle(score=nutrition_score, label='Nutrition', size=100, href='/nutrition') }}
+    <div class="weight-mini">
+      <span class="weight-mini-value metric-value">{{ trends.get('weight', {}).get('value', '--') }}</span>
+      <span class="weight-mini-unit">lbs</span>
+      <div class="weight-mini-spark">
+        <canvas id="spark-weight" width="80" height="32"></canvas>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -343,18 +384,6 @@
       </div>
       <div class="trend-sparkline">
         <canvas id="spark-cals"></canvas>
-      </div>
-    </div>
-
-    {% set t = trends.get('weight', {}) %}
-    <div class="card trend-card">
-      <div class="trend-label">Body Weight</div>
-      <div class="trend-value-row">
-        <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
-        <span class="trend-unit">{{ t.get('unit', 'lbs') }}</span>
-      </div>
-      <div class="trend-sparkline">
-        <canvas id="spark-weight"></canvas>
       </div>
     </div>
 
