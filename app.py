@@ -597,29 +597,36 @@ def recovery():
                 "recovery", recovery_score, recovery_result.get("components", {}),
             )
 
-        # ── Vitals row (5 metrics with delta vs baseline) ──────────
+        # ── Vitals row (4 metrics with delta vs baseline) ──────────
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT hrv_nightly_avg, resting_hr, respiration_avg,
-                       body_battery_eod, spo2_avg
+                SELECT date, hrv_nightly_avg, resting_hr, respiration_avg,
+                       body_battery_eod
                 FROM daily_log
-                WHERE date = %s
-            """, (today,))
-            today_row = cur.fetchone()
+                WHERE date IN (%s, %s)
+                ORDER BY date DESC
+            """, (today, yesterday))
+            vital_rows = cur.fetchall()
+
+        vital_by_date = {r["date"]: r for r in vital_rows}
+        today_row = vital_by_date.get(today)
+        yesterday_row = vital_by_date.get(yesterday)
 
         vital_defs = [
             ("HRV",              "hrv_nightly_avg",  "ms",   True,  "hrv_avg"),
             ("Resting HR",       "resting_hr",       "bpm",  False, "resting_hr_avg"),
             ("Respiratory Rate", "respiration_avg",   "brpm", False, "respiration_avg_val"),
             ("Body Battery",     "body_battery_eod",  "",    True,  "body_battery_avg"),
-            ("SpO2",             "spo2_avg",          "%",   True,  "spo2_avg_val"),
         ]
 
         vitals = []
         for label, col, unit, higher_is_better, baseline_key in vital_defs:
+            # Prefer today's value, fall back to yesterday's
             current = None
             if today_row and today_row.get(col) is not None:
                 current = float(today_row[col])
+            elif yesterday_row and yesterday_row.get(col) is not None:
+                current = float(yesterday_row[col])
 
             baseline_val = baselines.get(baseline_key)
 
@@ -638,11 +645,7 @@ def recovery():
 
             # Format current value
             if current is not None:
-                if col in ("hrv_nightly_avg", "resting_hr"):
-                    display_val = f"{current:.0f}"
-                elif col == "spo2_avg":
-                    display_val = f"{current:.1f}"
-                elif col == "body_battery_eod":
+                if col in ("hrv_nightly_avg", "resting_hr", "body_battery_eod"):
                     display_val = f"{current:.0f}"
                 elif col == "respiration_avg":
                     display_val = f"{current:.1f}"
