@@ -437,6 +437,9 @@ def health():
         for r in trend_rows:
             trend_data[r["date"]] = r
 
+        # Metrics that accumulate during the day — prefer yesterday
+        health_accumulating = {"steps"}
+
         vitals = []
         for key, col, label, unit, higher_is_better, baseline_key, std_key in vital_metrics:
             sparkline = []
@@ -448,9 +451,17 @@ def health():
                 if row and row.get(col) is not None:
                     val = float(row[col])
                 sparkline.append(val if val is not None else 0)
-                if d == today or (d == yesterday and current is None):
-                    if val is not None and val != 0:
-                        current = val
+                if key in health_accumulating:
+                    if d == yesterday:
+                        if val is not None and val != 0:
+                            current = val
+                    elif d == today and current is None:
+                        if val is not None and val != 0:
+                            current = val
+                else:
+                    if d == today or (d == yesterday and current is None):
+                        if val is not None and val != 0:
+                            current = val
 
             baseline_val = baselines.get(baseline_key)
             std_val = baselines.get(std_key)
@@ -498,27 +509,15 @@ def health():
                 "status_color": pill_class,
             })
 
-        # ── Body weight trend card (60-day sparse) ──────────────
+        # ── Body weight for pill row ─────────────────────────────
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT body_weight_lbs FROM daily_log
                 WHERE body_weight_lbs IS NOT NULL
-                  AND date >= %s
-                ORDER BY date ASC
-            """, (today - timedelta(days=60),))
-            wt_rows = cur.fetchall()
-        wt_sparkline = [float(r["body_weight_lbs"]) for r in wt_rows]
-        wt_current = wt_sparkline[-1] if wt_sparkline else None
-        vitals.append({
-            "id": "weight",
-            "label": "Body Weight",
-            "value": f"{wt_current:.1f}" if wt_current else "--",
-            "unit": "lbs",
-            "sparkline": wt_sparkline,
-            "avg": f"{sum(wt_sparkline)/len(wt_sparkline):.1f}" if wt_sparkline else None,
-            "status": "Normal",
-            "status_color": "normal",
-        })
+                ORDER BY date DESC LIMIT 1
+            """)
+            wt_row = cur.fetchone()
+        body_weight = float(wt_row["body_weight_lbs"]) if wt_row else None
 
         # ── Weekly Progress (avg score over last 7 days) ──────────
         weekly_scores = {"sleep": [], "training": [], "nutrition": []}
@@ -571,6 +570,7 @@ def health():
         nutrition_score=nutrition_score or 0,
         insight_chips=insight_chips,
         vitals=vitals,
+        body_weight=body_weight,
         weekly_progress=weekly_progress,
     )
 

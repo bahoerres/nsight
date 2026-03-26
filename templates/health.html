@@ -234,6 +234,12 @@
         <span class="score-pill-value">{{ score }}%</span>
       </a>
     {% endfor %}
+    {% if body_weight %}
+      <a href="/checkin" class="score-pill">
+        <span class="score-pill-name">Bodyweight</span>
+        <span class="score-pill-value">{{ body_weight | round(1) }} lbs</span>
+      </a>
+    {% endif %}
   </div>
 </section>
 
