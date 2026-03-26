@@ -229,13 +229,13 @@
   @media (max-width: 768px) {
     .scores-row-inner {
       grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-      padding: 20px;
+      gap: 8px;
+      padding: 20px 16px;
     }
 
     .scores-row-inner .score-circle svg {
-      width: 70px;
-      height: 70px;
+      width: clamp(56px, 16vw, 70px);
+      height: clamp(56px, 16vw, 70px);
     }
 
     .weight-mini {
@@ -264,13 +264,7 @@
 
   @media (max-width: 480px) {
     .scores-row-inner {
-      gap: 8px;
       padding: 16px 12px;
-    }
-
-    .scores-row-inner .score-circle svg {
-      width: 64px;
-      height: 64px;
     }
   }
 </style>

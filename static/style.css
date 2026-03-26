@@ -558,15 +558,14 @@ h4 { font-size: 1rem; }
   }
 
   .hero-inner {
-    padding: 60px 20px 24px;  /* top padding clears hamburger */
+    padding: 60px 16px 24px;  /* top padding clears hamburger */
     flex-direction: row;
-    flex-wrap: wrap;
     align-items: flex-end;
   }
 
   .hero-text {
     flex: 1 1 0%;
-    min-width: 60%;
+    min-width: 0;
   }
 
   .hero-title { font-size: 1.4rem; }
@@ -579,8 +578,8 @@ h4 { font-size: 1rem; }
   }
 
   .hero-score .score-circle svg {
-    width: 80px;
-    height: 80px;
+    width: 72px;
+    height: 72px;
   }
 
   .hero-score .score-number {
