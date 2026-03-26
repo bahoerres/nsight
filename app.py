@@ -165,6 +165,7 @@ def home():
                 # Filter out None values from array
                 muscles = [m for m in muscles if m]
 
+                session_id = r.get("session_id") or ""
                 recent_workouts.append({
                     "date": r["date"],
                     "date_str": r["date"].strftime("%b %-d"),
@@ -172,6 +173,7 @@ def home():
                     "set_count": r.get("set_count") or 0,
                     "total_volume": round(float(r.get("total_volume") or 0)),
                     "duration": duration,
+                    "hevy_url": f"https://hevy.com/workout/{session_id}" if session_id else None,
                 })
 
         # ── Weekly charts (7-day data) ─────────────────────────────
@@ -823,6 +825,7 @@ def training():
                 exercises = r.get("exercises") or []
                 exercises = [e for e in exercises if e]
 
+                session_id = r.get("session_id") or ""
                 recent_workouts.append({
                     "date": r["date"],
                     "date_str": r["date"].strftime("%b %-d"),
@@ -832,6 +835,7 @@ def training():
                     "total_sets": r.get("total_sets") or 0,
                     "exercise_count": r.get("exercise_count") or 0,
                     "duration": duration,
+                    "hevy_url": f"https://hevy.com/workout/{session_id}" if session_id else None,
                 })
 
         # ── Volume trend (30 days + 28-day MA) ──────────────────────

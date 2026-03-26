@@ -431,7 +431,7 @@
   {% if recent_workouts %}
   <div class="workout-scroll">
     {% for w in recent_workouts %}
-    <div class="card workout-card">
+    <{% if w.hevy_url %}a href="{{ w.hevy_url }}" target="_blank" rel="noopener"{% else %}div{% endif %} class="card workout-card" style="{% if w.hevy_url %}text-decoration:none; color:inherit;{% endif %}">
       <div class="workout-card-date">{{ w.date_str }}</div>
       <div class="workout-card-meta">
         <span>
@@ -457,7 +457,7 @@
           <span class="workout-stat-label">Sets</span>
         </div>
       </div>
-    </div>
+    </{% if w.hevy_url %}a{% else %}div{% endif %}>
     {% endfor %}
   </div>
   {% else %}

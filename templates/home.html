@@ -390,7 +390,7 @@
   </div>
   <div class="workout-cards">
     {% for w in recent_workouts %}
-    <div class="card workout-card">
+    <{% if w.hevy_url %}a href="{{ w.hevy_url }}" target="_blank" rel="noopener"{% else %}div{% endif %} class="card workout-card" style="{% if w.hevy_url %}cursor:pointer; text-decoration:none; color:inherit;{% endif %}">
       <div class="workout-card-header">
         <span class="workout-date">{{ w.date_str }}</span>
         {% if w.duration %}
@@ -418,7 +418,7 @@
           <span class="workout-stat-label">sets</span>
         </div>
       </div>
-    </div>
+    </{% if w.hevy_url %}a{% else %}div{% endif %}>
     {% endfor %}
   </div>
 </section>
