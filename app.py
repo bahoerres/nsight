@@ -2307,7 +2307,31 @@ def run_correlations_for_display() -> dict:
 @app.route("/correlations")
 def correlations_page():
     results = run_correlations_for_display()
-    return render_template("correlations.html", active_page="correlations", results=results)
+
+    # Fetch latest correlation insight
+    correlation_insight = None
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT content, date FROM insights WHERE type = 'correlation' ORDER BY date DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+            if row:
+                correlation_insight = {
+                    "content": row["content"],
+                    "date": row["date"].strftime("%-m/%-d/%Y") if row["date"] else None,
+                }
+        conn.close()
+    except Exception:
+        pass
+
+    return render_template(
+        "correlations.html",
+        active_page="correlations",
+        results=results,
+        correlation_insight=correlation_insight,
+    )
 
 
 # ── Run ─────────────────────────────────────────────────────────────

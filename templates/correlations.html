@@ -565,6 +565,19 @@
 {% endif %}
 {% endif %}
 
+{# ── Correlation Insight ──────────────────────────────────────────── #}
+{% if correlation_insight %}
+<div style="margin-top: var(--section-gap);">
+  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+    <span style="font-size: 1.1rem; font-weight: 600; color: var(--text);">What This Means</span>
+    <span style="font-size: 0.75rem; color: var(--text-muted);">updated {{ correlation_insight.date }}</span>
+  </div>
+  <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-left: 4px solid var(--green); border-radius: var(--radius-card); padding: 20px;">
+    <p style="color: var(--text-secondary); line-height: 1.65; margin: 0;">{{ correlation_insight.content }}</p>
+  </div>
+</div>
+{% endif %}
+
 {# ── Methodology note ─────────────────────────────────────────────── #}
 <div class="corr-methodology">
   <div class="corr-methodology-icon">
