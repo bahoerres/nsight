@@ -346,6 +346,18 @@
       </div>
     </div>
 
+    {% set t = trends.get('weight', {}) %}
+    <div class="card trend-card">
+      <div class="trend-label">Body Weight</div>
+      <div class="trend-value-row">
+        <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
+        <span class="trend-unit">{{ t.get('unit', 'lbs') }}</span>
+      </div>
+      <div class="trend-sparkline">
+        <canvas id="spark-weight"></canvas>
+      </div>
+    </div>
+
   </div>
 </section>
 
@@ -449,6 +461,7 @@ document.addEventListener('DOMContentLoaded', function() {
   createSparkline('spark-bb',    trends.body_battery    ? trends.body_battery.sparkline    : [], '#d8a657');
   createSparkline('spark-sleep', trends.sleep_hours     ? trends.sleep_hours.sparkline     : [], '#7daea3');
   createSparkline('spark-cals',  trends.calories        ? trends.calories.sparkline        : [], '#e78a4e');
+  createSparkline('spark-weight', trends.weight          ? trends.weight.sparkline          : [], '#d3869b');
 
 });
 </script>

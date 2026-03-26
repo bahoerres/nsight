@@ -298,6 +298,26 @@ def home():
                 "higher_is_better": higher_is_better,
             }
 
+        # ── Body weight trend (60-day sparse sparkline) ──────────
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT body_weight_lbs FROM daily_log
+                WHERE body_weight_lbs IS NOT NULL
+                  AND date >= %s
+                ORDER BY date ASC
+            """, (today - timedelta(days=60),))
+            weight_rows = cur.fetchall()
+
+        weight_sparkline = [float(r["body_weight_lbs"]) for r in weight_rows]
+        weight_current = weight_sparkline[-1] if weight_sparkline else None
+        trends["weight"] = {
+            "value": f"{weight_current:.1f}" if weight_current else "--",
+            "unit": "lbs",
+            "sparkline": weight_sparkline,
+            "delta": None,
+            "higher_is_better": True,
+        }
+
     finally:
         conn.close()
 
@@ -460,6 +480,28 @@ def health():
                 "status": status_text,
                 "status_color": pill_class,
             })
+
+        # ── Body weight trend card (60-day sparse) ──────────────
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT body_weight_lbs FROM daily_log
+                WHERE body_weight_lbs IS NOT NULL
+                  AND date >= %s
+                ORDER BY date ASC
+            """, (today - timedelta(days=60),))
+            wt_rows = cur.fetchall()
+        wt_sparkline = [float(r["body_weight_lbs"]) for r in wt_rows]
+        wt_current = wt_sparkline[-1] if wt_sparkline else None
+        vitals.append({
+            "id": "weight",
+            "label": "Body Weight",
+            "value": f"{wt_current:.1f}" if wt_current else "--",
+            "unit": "lbs",
+            "sparkline": wt_sparkline,
+            "avg": f"{sum(wt_sparkline)/len(wt_sparkline):.1f}" if wt_sparkline else None,
+            "status": "Normal",
+            "status_color": "normal",
+        })
 
         # ── Weekly Progress (avg score over last 7 days) ──────────
         weekly_scores = {"sleep": [], "training": [], "nutrition": []}
