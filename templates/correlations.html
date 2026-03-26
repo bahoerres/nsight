@@ -102,6 +102,34 @@
     border: 1px solid rgba(215, 166, 87, 0.3);
   }
 
+  /* ── Collapsible details ──────────────────────────────────────── */
+  .corr-details {
+    margin-top: var(--section-gap);
+  }
+
+  .corr-details > summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .corr-details > summary::-webkit-details-marker { display: none; }
+
+  .corr-details .corr-chevron {
+    margin-left: auto;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .corr-details[open] .corr-chevron {
+    transform: rotate(180deg);
+  }
+
+  .corr-details .corr-list {
+    margin-top: 16px;
+  }
+
   /* ── Finding Cards ─────────────────────────────────────────────── */
   .corr-list {
     display: flex;
@@ -418,128 +446,78 @@
 {# ── Normal results ──────────────────────────────────────────────── #}
 {% else %}
 
-{# ── Summary bar ─────────────────────────────────────────────────── #}
-<div class="corr-summary">
-  <div class="corr-summary-stat">
-    <span class="corr-summary-value">{{ results.significant_count }}</span>
-    <span class="corr-summary-label">Significant</span>
+{# ── Correlation Insight (first) ──────────────────────────────────── #}
+{% if correlation_insight %}
+<div style="margin-top: var(--section-gap);">
+  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+    <span style="font-size: 1.1rem; font-weight: 600; color: var(--text);">What This Means</span>
+    <span style="font-size: 0.75rem; color: var(--text-muted);">updated {{ correlation_insight.date }}</span>
   </div>
-  <div class="corr-summary-divider"></div>
-  <div class="corr-summary-stat">
-    <span class="corr-summary-value">{{ results.total_tests }}</span>
-    <span class="corr-summary-label">Tests run</span>
+  <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-left: 4px solid var(--green); border-radius: var(--radius-card); padding: 20px;">
+    <p style="color: var(--text-secondary); line-height: 1.65; margin: 0;">{{ correlation_insight.content }}</p>
   </div>
-  <div class="corr-summary-divider"></div>
-  <div class="corr-summary-stat">
-    <span class="corr-summary-value">{{ results.num_pairs }}</span>
-    <span class="corr-summary-label">Metric pairs</span>
-  </div>
-  <div class="corr-summary-divider"></div>
-  <div class="corr-summary-stat">
-    <span class="corr-summary-value">{{ results.num_lags }}</span>
-    <span class="corr-summary-label">Lag windows</span>
-  </div>
-  <span class="corr-summary-alpha">FDR &alpha; = {{ "%.2f"|format(results.alpha) }}</span>
 </div>
+{% endif %}
 
-{# ── FDR-significant findings ─────────────────────────────────────── #}
-{% if results.findings %}
-<div class="corr-section-header">
-  <span class="corr-section-title">Significant Correlations</span>
-  <span class="corr-section-count">{{ results.findings | length }}</span>
-</div>
+{# ── Significant / Exploratory findings (collapsible, closed) ─────── #}
+{% set findings_list = results.findings if results.findings else results.exploratory %}
+{% set is_exploratory = not results.findings and results.exploratory %}
 
-<div class="corr-list" id="corr-list-significant">
-  {% for f in results.findings %}
-  {% set abs_r = f.r | abs %}
-  {% set r_pct = (abs_r * 100) | round | int %}
-  {% set r_class = 'r-pos' if f.r >= 0 else 'r-neg' %}
-  {% if abs_r >= 0.5 %}{% set strength = 'Strong' %}
-  {% elif abs_r >= 0.3 %}{% set strength = 'Moderate' %}
-  {% else %}{% set strength = 'Weak' %}
-  {% endif %}
-  {% if f.lag_days == 0 %}{% set lag_label = 'Same day' %}{% set lag_class = 'lag-same' %}
-  {% elif f.lag_days == 1 %}{% set lag_label = '1-day lag' %}{% set lag_class = 'lag-short' %}
-  {% elif f.lag_days <= 3 %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-short' %}
-  {% else %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-long' %}
-  {% endif %}
-  <article class="corr-card {{ r_class }}" data-r-pct="{{ r_pct }}">
-    <div class="corr-card-inner">
-      <div class="corr-card-left">
-        <p class="corr-interpretation">{{ f.interpretation }}</p>
-        <div class="corr-strength">
-          <div class="corr-strength-labels">
-            <span class="corr-r-value">r = {{ "%.2f"|format(f.r) }}</span>
-            <span class="corr-strength-word">{{ strength }}</span>
+{% if findings_list %}
+<details class="corr-details">
+  <summary class="corr-section-header corr-details-toggle">
+    <span class="corr-section-title">{{ 'Exploratory Findings' if is_exploratory else 'Significant Correlations' }}</span>
+    <span class="corr-section-count">{{ findings_list | length }}</span>
+    {% if is_exploratory %}
+      <span class="corr-exploratory-badge">Not FDR-corrected</span>
+    {% endif %}
+    <svg class="corr-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  </summary>
+
+  <div class="corr-list">
+    {% for f in findings_list %}
+    {% set abs_r = f.r | abs %}
+    {% set r_pct = (abs_r * 100) | round | int %}
+    {% set r_class = 'r-pos' if f.r >= 0 else 'r-neg' %}
+    {% if abs_r >= 0.5 %}{% set strength = 'Strong' %}
+    {% elif abs_r >= 0.3 %}{% set strength = 'Moderate' %}
+    {% else %}{% set strength = 'Weak' %}
+    {% endif %}
+    {% if f.lag_days == 0 %}{% set lag_label = 'Same day' %}{% set lag_class = 'lag-same' %}
+    {% elif f.lag_days == 1 %}{% set lag_label = '1-day lag' %}{% set lag_class = 'lag-short' %}
+    {% elif f.lag_days <= 3 %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-short' %}
+    {% else %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-long' %}
+    {% endif %}
+    <article class="corr-card {{ r_class }}" data-r-pct="{{ r_pct }}">
+      <div class="corr-card-inner">
+        <div class="corr-card-left">
+          <p class="corr-interpretation">{{ f.interpretation }}</p>
+          <div class="corr-strength">
+            <div class="corr-strength-labels">
+              <span class="corr-r-value">r = {{ "%.2f"|format(f.r) }}</span>
+              <span class="corr-strength-word">{{ strength }}</span>
+            </div>
+            <div class="corr-bar-track">
+              <div class="corr-bar-fill" style="--target-width: {{ r_pct }}%"></div>
+            </div>
           </div>
-          <div class="corr-bar-track">
-            <div class="corr-bar-fill" style="--target-width: {{ r_pct }}%"></div>
-          </div>
-        </div>
-        <div class="corr-meta">
-          <span class="corr-chip {{ lag_class }}">{{ lag_label }}</span>
-          <span class="corr-chip">n = {{ f.n }}</span>
-          <span class="corr-pair">{{ f.x }} &times; {{ f.y }}</span>
-        </div>
-      </div>
-      <div class="corr-card-right">
-        <span class="corr-pvalue">p = {{ "%.4f"|format(f.p_corrected) }}</span>
-      </div>
-    </div>
-  </article>
-  {% endfor %}
-</div>
-
-{# ── No FDR findings — show exploratory ──────────────────────────── #}
-{% else %}
-
-{% if results.exploratory %}
-<div class="corr-section-header">
-  <span class="corr-section-title">Exploratory Findings</span>
-  <span class="corr-section-count">{{ results.exploratory | length }}</span>
-  <span class="corr-exploratory-badge">Not FDR-corrected</span>
-</div>
-
-<div class="corr-list" id="corr-list-exploratory">
-  {% for f in results.exploratory %}
-  {% set abs_r = f.r | abs %}
-  {% set r_pct = (abs_r * 100) | round | int %}
-  {% set r_class = 'r-pos' if f.r >= 0 else 'r-neg' %}
-  {% if abs_r >= 0.5 %}{% set strength = 'Strong' %}
-  {% elif abs_r >= 0.3 %}{% set strength = 'Moderate' %}
-  {% else %}{% set strength = 'Weak' %}
-  {% endif %}
-  {% if f.lag_days == 0 %}{% set lag_label = 'Same day' %}{% set lag_class = 'lag-same' %}
-  {% elif f.lag_days == 1 %}{% set lag_label = '1-day lag' %}{% set lag_class = 'lag-short' %}
-  {% elif f.lag_days <= 3 %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-short' %}
-  {% else %}{% set lag_label = f.lag_days ~ '-day lag' %}{% set lag_class = 'lag-long' %}
-  {% endif %}
-  <article class="corr-card {{ r_class }}" data-r-pct="{{ r_pct }}">
-    <div class="corr-card-inner">
-      <div class="corr-card-left">
-        <p class="corr-interpretation">{{ f.interpretation }}</p>
-        <div class="corr-strength">
-          <div class="corr-strength-labels">
-            <span class="corr-r-value">r = {{ "%.2f"|format(f.r) }}</span>
-            <span class="corr-strength-word">{{ strength }}</span>
-          </div>
-          <div class="corr-bar-track">
-            <div class="corr-bar-fill" style="--target-width: {{ r_pct }}%"></div>
+          <div class="corr-meta">
+            <span class="corr-chip {{ lag_class }}">{{ lag_label }}</span>
+            <span class="corr-chip">n = {{ f.n }}</span>
+            <span class="corr-pair">{{ f.x }} &times; {{ f.y }}</span>
           </div>
         </div>
-        <div class="corr-meta">
-          <span class="corr-chip {{ lag_class }}">{{ lag_label }}</span>
-          <span class="corr-chip">n = {{ f.n }}</span>
-          <span class="corr-pair">{{ f.x }} &times; {{ f.y }}</span>
+        <div class="corr-card-right">
+          <span class="corr-pvalue">p = {{ "%.4f"|format(f.p_corrected) }}</span>
         </div>
       </div>
-      <div class="corr-card-right">
-        <span class="corr-pvalue">p = {{ "%.4f"|format(f.p_corrected) }}</span>
-      </div>
-    </div>
-  </article>
-  {% endfor %}
-</div>
+    </article>
+    {% endfor %}
+  </div>
+</details>
 
 {% else %}
 {# ── Truly empty ─────────────────────────────────────────────────── #}
@@ -563,20 +541,30 @@
   </p>
 </div>
 {% endif %}
-{% endif %}
 
-{# ── Correlation Insight ──────────────────────────────────────────── #}
-{% if correlation_insight %}
-<div style="margin-top: var(--section-gap);">
-  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-    <span style="font-size: 1.1rem; font-weight: 600; color: var(--text);">What This Means</span>
-    <span style="font-size: 0.75rem; color: var(--text-muted);">updated {{ correlation_insight.date }}</span>
+{# ── Summary bar ─────────────────────────────────────────────────── #}
+<div class="corr-summary">
+  <div class="corr-summary-stat">
+    <span class="corr-summary-value">{{ results.significant_count }}</span>
+    <span class="corr-summary-label">Significant</span>
   </div>
-  <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-left: 4px solid var(--green); border-radius: var(--radius-card); padding: 20px;">
-    <p style="color: var(--text-secondary); line-height: 1.65; margin: 0;">{{ correlation_insight.content }}</p>
+  <div class="corr-summary-divider"></div>
+  <div class="corr-summary-stat">
+    <span class="corr-summary-value">{{ results.total_tests }}</span>
+    <span class="corr-summary-label">Tests run</span>
   </div>
+  <div class="corr-summary-divider"></div>
+  <div class="corr-summary-stat">
+    <span class="corr-summary-value">{{ results.num_pairs }}</span>
+    <span class="corr-summary-label">Metric pairs</span>
+  </div>
+  <div class="corr-summary-divider"></div>
+  <div class="corr-summary-stat">
+    <span class="corr-summary-value">{{ results.num_lags }}</span>
+    <span class="corr-summary-label">Lag windows</span>
+  </div>
+  <span class="corr-summary-alpha">FDR &alpha; = {{ "%.2f"|format(results.alpha) }}</span>
 </div>
-{% endif %}
 
 {# ── Methodology note ─────────────────────────────────────────────── #}
 <div class="corr-methodology">
