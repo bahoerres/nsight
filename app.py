@@ -509,15 +509,6 @@ def health():
                 "status_color": pill_class,
             })
 
-        # ── Body weight for pill row ─────────────────────────────
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT body_weight_lbs FROM daily_log
-                WHERE body_weight_lbs IS NOT NULL
-                ORDER BY date DESC LIMIT 1
-            """)
-            wt_row = cur.fetchone()
-        body_weight = float(wt_row["body_weight_lbs"]) if wt_row else None
 
         # ── Weekly Progress (avg score over last 7 days) ──────────
         weekly_scores = {"sleep": [], "training": [], "nutrition": []}
@@ -570,7 +561,6 @@ def health():
         nutrition_score=nutrition_score or 0,
         insight_chips=insight_chips,
         vitals=vitals,
-        body_weight=body_weight,
         weekly_progress=weekly_progress,
     )
 
