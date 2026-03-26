@@ -382,12 +382,8 @@ def health():
             """)
             for row in cur.fetchall():
                 content = row["content"] or ""
-                # Use first two sentences for the chip
-                sentences = content.split(". ")
-                chip_text = ". ".join(sentences[:2])
-                if chip_text and not chip_text.endswith("."):
-                    chip_text += "."
-                insight_chips.append(chip_text)
+                if content:
+                    insight_chips.append(content)
                 if len(insight_chips) >= 1:
                     break
 
