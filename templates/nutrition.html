@@ -304,26 +304,15 @@
   </div>
   <div class="nutrition-trends-grid">
     {% for t in trends %}
-      {% if t.no_data %}
-        {# Water card — no tracking data placeholder #}
-        <div class="card trend-card trend-card-nodata">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
-          </svg>
-          <span class="trend-label">{{ t.label }}</span>
-          <span class="trend-nodata-msg">No tracking data available</span>
-        </div>
-      {% else %}
-        {{ trend_card(
-            id=t.id,
-            label=t.label,
-            value=t.value,
-            unit=t.unit,
-            avg_label=t.avg_label,
-            status=t.status,
-            status_color=t.status_color
-        ) }}
-      {% endif %}
+      {{ trend_card(
+          id=t.id,
+          label=t.label,
+          value=t.value,
+          unit=t.unit,
+          avg_label=t.avg_label,
+          status=t.status,
+          status_color=t.status_color
+      ) }}
     {% endfor %}
   </div>
 </section>
@@ -447,13 +436,12 @@ document.addEventListener('DOMContentLoaded', function() {
     'fat':       '#ea6962',
     'fiber':     '#7daea3',
     'sodium':    '#d3869b',
+    'potassium': '#89b482',
     'water':     '#7daea3',
   };
 
   trends.forEach(function(t) {
-    if (!t.no_data) {
-      createSparkline('spark-' + t.id, t.sparkline, colorMap[t.id] || '#a9b665');
-    }
+    createSparkline('spark-' + t.id, t.sparkline, colorMap[t.id] || '#a9b665');
   });
 });
 </script>

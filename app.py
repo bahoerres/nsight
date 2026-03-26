@@ -1441,7 +1441,8 @@ def nutrition():
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT date, crono_calories, crono_protein_g, crono_carbs_g,
-                       crono_fat_g, crono_fiber_g, crono_sodium_mg
+                       crono_fat_g, crono_fiber_g, crono_sodium_mg,
+                       crono_potassium_mg, crono_water_g
                 FROM daily_log
                 WHERE date >= %s AND date <= %s
                 ORDER BY date ASC
@@ -1460,26 +1461,12 @@ def nutrition():
             ("fat",       "crono_fat_g",      "Total Fat",         "g",    50,     "Target 50g",       "int"),
             ("fiber",     "crono_fiber_g",    "Fiber",             "g",    None,   "Target 26 – 34g",  "one_dec"),
             ("sodium",    "crono_sodium_mg",  "Sodium",            "mg",   None,   "Target 3,500 – 4,500mg", "int_comma"),
-            ("water",     None,               "Water",             "",     None,   None,               "none"),
+            ("potassium", "crono_potassium_mg", "Potassium",       "mg",   3800,   "Target 3,800mg",   "int_comma"),
+            ("water",     "crono_water_g",    "Water",             "oz",   120,    "Target 120 oz",    "water_oz"),
         ]
 
         trends = []
         for key, col, label, unit, target_val, target_label, fmt in trend_defs:
-            if key == "water":
-                # Placeholder — no tracking data
-                trends.append({
-                    "id": key,
-                    "label": label,
-                    "value": "--",
-                    "unit": "",
-                    "sparkline": [0, 0, 0, 0, 0, 0, 0],
-                    "avg_label": "",
-                    "status": "No data",
-                    "status_color": "muted",
-                    "no_data": True,
-                })
-                continue
-
             sparkline = []
             current = None
 
@@ -1493,6 +1480,10 @@ def nutrition():
                 if d == yesterday or (d == today and current is None):
                     if val is not None and val != 0:
                         current = val
+
+            # Convert water sparkline from grams to oz for chart display
+            if fmt == "water_oz":
+                sparkline = [round(v / 29.5735, 1) if v else 0 for v in sparkline]
 
             # Day-specific targets for calories and carbs
             if key == "calories":
@@ -1552,10 +1543,30 @@ def nutrition():
                         status_text, status_color = "Below", "below"
                     else:
                         status_text, status_color = "Above", "above"
+                elif key == "potassium":
+                    pct_off = abs(current - 3800) / 3800 * 100
+                    if pct_off <= 15:
+                        status_text, status_color = "On track", "normal"
+                    elif current < 3800:
+                        status_text, status_color = "Below", "below"
+                    else:
+                        status_text, status_color = "Above", "normal"
+                elif key == "water":
+                    # current is in grams, target is 120 oz = ~3540g
+                    water_oz = current / 29.5735
+                    if water_oz >= 100:
+                        status_text, status_color = "On track", "normal"
+                    elif water_oz >= 60:
+                        status_text, status_color = "Below", "below"
+                    else:
+                        status_text, status_color = "Low", "below"
 
             # Format display value
             if current is not None:
-                if fmt == "int_comma":
+                if fmt == "water_oz":
+                    # Convert grams to fl oz
+                    display_val = f"{current / 29.5735:.0f}"
+                elif fmt == "int_comma":
                     display_val = f"{int(current):,}"
                 elif fmt == "int":
                     display_val = f"{int(current)}"
