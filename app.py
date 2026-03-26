@@ -357,39 +357,19 @@ def health():
             sleep_result, recovery_result, training_result, nutrition_result
         )
 
-        # ── Daily insight (hero text) ─────────────────────────────
-        daily_summary = None
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT content FROM insights WHERE date = %s AND type = 'daily' LIMIT 1",
-                (today,),
-            )
-            row = cur.fetchone()
-            if row:
-                daily_summary = _truncate_summary(row["content"])
-
-        if not daily_summary:
-            # Try yesterday
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT content FROM insights WHERE date = %s AND type = 'daily' LIMIT 1",
-                    (yesterday,),
-                )
-                row = cur.fetchone()
-                if row:
-                    daily_summary = _truncate_summary(row["content"])
-
-        if not daily_summary:
-            daily_summary = generate_hero_summary(
-                "overall",
-                overall_score,
-                {
-                    "sleep_score": sleep_score,
-                    "recovery_score": recovery_score,
-                    "training_score": training_score,
-                    "nutrition_score": nutrition_score,
-                },
-            )
+        # ── Hero summary — always use the short template-based summary
+        #    The daily insight is too detailed/long for the hero overlay.
+        #    It goes in the insight chip instead.
+        daily_summary = generate_hero_summary(
+            "overall",
+            overall_score,
+            {
+                "sleep_score": sleep_score,
+                "recovery_score": recovery_score,
+                "training_score": training_score,
+                "nutrition_score": nutrition_score,
+            },
+        )
 
         # ── Insight chip (1 chip, different from hero text) ──────────
         insight_chips = []
@@ -402,13 +382,12 @@ def health():
             """)
             for row in cur.fetchall():
                 content = row["content"] or ""
-                first_sentence = content.split(". ")[0]
-                if first_sentence and not first_sentence.endswith("."):
-                    first_sentence += "."
-                # Skip if it's the same text used in the hero
-                if daily_summary and first_sentence in daily_summary:
-                    continue
-                insight_chips.append(first_sentence)
+                # Use first two sentences for the chip
+                sentences = content.split(". ")
+                chip_text = ". ".join(sentences[:2])
+                if chip_text and not chip_text.endswith("."):
+                    chip_text += "."
+                insight_chips.append(chip_text)
                 if len(insight_chips) >= 1:
                     break
 
