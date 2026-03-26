@@ -229,11 +229,9 @@
 
   @media (max-width: 768px) {
     .scores-row-inner {
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 8px;
       padding: 20px 16px;
-      max-width: 100%;
-      overflow: hidden;
     }
 
     .scores-row-inner .score-circle svg {
