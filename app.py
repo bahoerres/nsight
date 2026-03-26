@@ -1412,12 +1412,14 @@ def nutrition():
         ]
 
         # ── Hero summary ─────────────────────────────────────────────
-        day_type = "high-carb day" if high_carb_day else "standard day"
+        yesterday_name = yesterday.strftime("%A")
+        day_type = "high-carb" if high_carb_day else "standard"
         hero_summary = generate_hero_summary(
-            "nutrition", nutrition_score, components,
+            "nutrition", nutrition_score,
+            {"targets": {"high_carb_day": high_carb_day}, "components": components},
         )
-        # Prepend day type context
-        hero_summary = f"Today is a {day_type} (Tue/Wed = high-carb). {hero_summary}"
+        # Prepend day type context — note: data is for yesterday
+        hero_summary = f"{yesterday_name} was a {day_type} day. {hero_summary}"
 
         # ── 30-day performance (line chart + donut) ───────────────────
         perf_labels = []
