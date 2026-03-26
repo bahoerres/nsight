@@ -332,7 +332,7 @@
         <span class="trend-value metric-value">{{ t.get('value', '--') }}</span>
         <span class="trend-unit">{{ t.get('unit', 'bpm') }}</span>
         {% if t.get('delta') is not none %}
-          <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) != t.higher_is_better else 'trend-delta-down' }}">
+          <span class="trend-delta {{ 'trend-delta-up' if (t.delta > 0) == t.higher_is_better else 'trend-delta-down' }}">
             {{ '+' if t.delta > 0 else '' }}{{ t.delta }}%
           </span>
         {% endif %}
