@@ -305,10 +305,8 @@ def compute_recovery_score(conn, target_date, baselines):
     # Component 3: resting HR vs baseline (lower is better)
     rhr_score = _score_component(resting_hr, baselines.get("resting_hr_avg"), higher_is_better=False)
 
-    # Component 4: body battery — absolute scale 0-100, 80 = 80 points
-    bb_score = None
-    if body_battery is not None:
-        bb_score = _clamp(body_battery)
+    # Component 4: body battery vs personal baseline
+    bb_score = _score_component(body_battery, baselines.get("body_battery_avg"), higher_is_better=True)
 
     components = {
         "hrv":          hrv_score,
