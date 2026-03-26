@@ -121,28 +121,17 @@ def home():
             sleep_result, recovery_result, training_result, nutrition_result
         )
 
-        # ── Daily insight ──────────────────────────────────────────
-        daily_summary = None
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT content FROM insights WHERE date = %s AND type = 'daily' LIMIT 1",
-                (yesterday,),
-            )
-            row = cur.fetchone()
-            if row:
-                daily_summary = _truncate_summary(row["content"])
-
-        if not daily_summary:
-            daily_summary = generate_hero_summary(
-                "overall",
-                overall_score,
-                {
-                    "sleep_score": sleep_score,
-                    "recovery_score": recovery_score,
-                    "training_score": training_score,
-                    "nutrition_score": nutrition_score,
-                },
-            )
+        # ── Hero summary — short template text, not the full daily insight
+        daily_summary = generate_hero_summary(
+            "overall",
+            overall_score,
+            {
+                "sleep_score": sleep_score,
+                "recovery_score": recovery_score,
+                "training_score": training_score,
+                "nutrition_score": nutrition_score,
+            },
+        )
 
         # ── Recent workouts (last 3 sessions) ─────────────────────
         recent_workouts = []
