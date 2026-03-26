@@ -356,51 +356,23 @@
 
 {% block content %}
 
-{# ── Recent Workouts ──────────────────────────────────────────────── #}
+{# ── Volume by Muscle Group ──────────────────────────────────────── #}
 <section>
   <div class="section-header mt-section">
-    <h3 class="section-title">Recent Workouts</h3>
+    <h3 class="section-title">Volume by Muscle Group</h3>
   </div>
-  {% if recent_workouts %}
-  <div class="workout-scroll">
-    {% for w in recent_workouts %}
-    <div class="card workout-card">
-      <div class="workout-card-date">{{ w.date_str }}</div>
-      <div class="workout-card-meta">
-        <span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          {% if w.duration %}{{ w.duration }} min{% else %}--{% endif %}
-        </span>
-        <span>{{ w.exercise_count }} exercises</span>
-      </div>
-      {% if w.muscle_groups %}
-      <div class="workout-muscle-tags">
-        {% for mg in w.muscle_groups %}
-          <span class="workout-muscle-tag">{{ mg }}</span>
-        {% endfor %}
-      </div>
-      {% endif %}
-      <div class="workout-card-stats">
-        <div class="workout-stat">
-          <span class="workout-stat-value">{{ "{:,}".format(w.volume) }}</span>
-          <span class="workout-stat-label">Volume (lbs)</span>
-        </div>
-        <div class="workout-stat">
-          <span class="workout-stat-value">{{ w.total_sets }}</span>
-          <span class="workout-stat-label">Sets</span>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
   <div class="card chart-card">
-    <p style="color: var(--text-muted);">No recent workouts found.</p>
+    <div class="chart-wrap chart-wrap-tall">
+      <canvas id="muscle-vol-chart"></canvas>
+    </div>
   </div>
-  {% endif %}
 </section>
 
-{# ── Volume Trend + ACWR ─────────────────────────────────────────── #}
+{# ── Accumulation (Volume Trend + ACWR) ──────────────────────────── #}
+<section>
+  <div class="section-header mt-section">
+    <h3 class="section-title">Accumulation</h3>
+  </div>
 <div class="training-grid-2col">
   <div class="card chart-card">
     <h4>Volume Trend</h4>
@@ -449,17 +421,50 @@
     </div>
   </div>
 </div>
+</section>
 
-{# ── Volume by Muscle Group ──────────────────────────────────────── #}
+{# ── Recent Workouts ──────────────────────────────────────────────── #}
 <section>
   <div class="section-header mt-section">
-    <h3 class="section-title">Volume by Muscle Group</h3>
+    <h3 class="section-title">Recent Workouts</h3>
   </div>
-  <div class="card chart-card">
-    <div class="chart-wrap chart-wrap-tall">
-      <canvas id="muscle-vol-chart"></canvas>
+  {% if recent_workouts %}
+  <div class="workout-scroll">
+    {% for w in recent_workouts %}
+    <div class="card workout-card">
+      <div class="workout-card-date">{{ w.date_str }}</div>
+      <div class="workout-card-meta">
+        <span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          {% if w.duration %}{{ w.duration }} min{% else %}--{% endif %}
+        </span>
+        <span>{{ w.exercise_count }} exercises</span>
+      </div>
+      {% if w.muscle_groups %}
+      <div class="workout-muscle-tags">
+        {% for mg in w.muscle_groups %}
+          <span class="workout-muscle-tag">{{ mg }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <div class="workout-card-stats">
+        <div class="workout-stat">
+          <span class="workout-stat-value">{{ "{:,}".format(w.volume) }}</span>
+          <span class="workout-stat-label">Volume (lbs)</span>
+        </div>
+        <div class="workout-stat">
+          <span class="workout-stat-value">{{ w.total_sets }}</span>
+          <span class="workout-stat-label">Sets</span>
+        </div>
+      </div>
     </div>
+    {% endfor %}
   </div>
+  {% else %}
+  <div class="card chart-card">
+    <p style="color: var(--text-muted);">No recent workouts found.</p>
+  </div>
+  {% endif %}
 </section>
 
 {# ── Personal Records ────────────────────────────────────────────── #}
