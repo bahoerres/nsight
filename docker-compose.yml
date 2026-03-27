@@ -15,3 +15,5 @@ services:
 
 volumes:
   postgres_data:
+    external: true
+    name: healthdash_postgres_data
