@@ -1,0 +1,9 @@
+[Unit]
+Description=nsight nightly data ingest
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/stacks/nsight
+ExecStart=%h/stacks/nsight/nsight-ingest
+EnvironmentFile=%h/stacks/nsight/.env
