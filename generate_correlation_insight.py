@@ -26,7 +26,7 @@ MAX_TOKENS = 1024
 
 # Load athlete context if available
 _CONTEXT_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "healthdash", "athlete_context.txt"
+    os.path.dirname(os.path.abspath(__file__)), "athlete_context.txt"
 )
 ATHLETE_CONTEXT = ""
 if os.path.exists(_CONTEXT_PATH):

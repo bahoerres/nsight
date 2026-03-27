@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# nsight-ingest
+# Nightly ingest pipeline: pull data, compute scores, generate insights.
+# Designed to be called by systemd timer or cron.
+
+set -euo pipefail
+
+NSIGHT_DIR="${NSIGHT_DIR:-$HOME/stacks/nsight}"
+VENV="$NSIGHT_DIR/.venv/bin/python"
+LOG_DIR="${LOG_DIR:-$HOME/.local/log/nsight}"
+TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+LOG_FILE="$LOG_DIR/ingest-$TIMESTAMP.log"
+
+mkdir -p "$LOG_DIR"
+
+# Load .env for credentials — never put passwords on the command line
+if [ -f "$NSIGHT_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$NSIGHT_DIR/.env"
+  set +a
+fi
+
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+log "=== nsight nightly ingest starting ==="
+
+# Garmin — last 2 days to catch any late syncs from yesterday
+log "--- Garmin ---"
+if "$VENV" "$NSIGHT_DIR/ingest_garmin.py" --days 2 >>"$LOG_FILE" 2>&1; then
+  log "Garmin: OK"
+else
+  log "Garmin: FAILED (exit $?)"
+fi
+
+# Hevy — last 30 days (fast, catches any edits to recent sessions)
+log "--- Hevy ---"
+if "$VENV" "$NSIGHT_DIR/ingest_hevy.py" --days 30 >>"$LOG_FILE" 2>&1; then
+  log "Hevy: OK"
+else
+  log "Hevy: FAILED (exit $?)"
+fi
+
+# Cronometer — auto-export via cronometer-export binary if credentials exist
+CRONO_CSV="$NSIGHT_DIR/cronometer/servings.csv"
+CRONO_BIN="${CRONO_BIN:-/usr/local/bin/cronometer-export}"
+
+log "--- Cronometer ---"
+if [ -n "${CRONOMETER_EMAIL:-}" ] && [ -n "${CRONOMETER_PASSWORD:-}" ] && [ -x "$CRONO_BIN" ]; then
+  # pull last 7 days — overlaps are fine, ingest does upserts
+  if "$CRONO_BIN" \
+    -s -7d -e 0d \
+    -u "$CRONOMETER_EMAIL" \
+    -p "$CRONOMETER_PASSWORD" \
+    -t servings \
+    -o "$CRONO_CSV" >>"$LOG_FILE" 2>&1; then
+    log "Cronometer export: OK"
+    if "$VENV" "$NSIGHT_DIR/cronometer/ingest_cronometer.py" --servings "$CRONO_CSV" >>"$LOG_FILE" 2>&1; then
+      log "Cronometer ingest: OK"
+    else
+      log "Cronometer ingest: FAILED (exit $?)"
+    fi
+  else
+    log "Cronometer export: FAILED (exit $?)"
+  fi
+elif [ -f "$CRONO_CSV" ]; then
+  # fallback: use manually dropped CSV if binary not available
+  log "cronometer-export binary not found, using existing CSV"
+  if "$VENV" "$NSIGHT_DIR/cronometer/ingest_cronometer.py" --servings "$CRONO_CSV" >>"$LOG_FILE" 2>&1; then
+    log "Cronometer ingest: OK"
+  else
+    log "Cronometer ingest: FAILED (exit $?)"
+  fi
+else
+  log "Cronometer: skipping — no binary and no CSV found"
+fi
+
+# Materialize nsight scores (runs after all data is fresh)
+log "--- nsight scores ---"
+if "$VENV" "$NSIGHT_DIR/materialize_scores.py" --days 2 >>"$LOG_FILE" 2>&1; then
+  log "nsight scores: OK"
+else
+  log "nsight scores: FAILED (exit $?)"
+fi
+
+# Correlation insight (weekly, runs on Mondays)
+if [ "$(date +%u)" = "1" ]; then
+  log "--- Correlation insight ---"
+  if "$VENV" "$NSIGHT_DIR/generate_correlation_insight.py" >>"$LOG_FILE" 2>&1; then
+    log "Correlation insight: OK"
+  else
+    log "Correlation insight: FAILED (exit $?)"
+  fi
+fi
+
+# Generate daily insight (runs after data is fresh)
+log "--- Daily insight ---"
+if "$VENV" "$NSIGHT_DIR/generate_insights.py" --daily >>"$LOG_FILE" 2>&1; then
+  log "Daily insight: OK"
+else
+  log "Daily insight: FAILED (exit $?)"
+fi
+
+log "=== ingest complete ==="
+
+# Trim logs older than 30 days
+find "$LOG_DIR" -name "ingest-*.log" -mtime +30 -delete
