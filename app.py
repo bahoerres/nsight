@@ -141,7 +141,8 @@ def home():
                        ARRAY_AGG(DISTINCT muscle_group) AS muscle_groups,
                        COUNT(*) AS set_count,
                        SUM(reps * weight_lbs) AS total_volume,
-                       MAX(set_index) AS max_set
+                       MAX(set_index) AS max_set,
+                       MAX(session_title) AS session_title
                 FROM hevy_sets
                 WHERE date <= %s
                 GROUP BY date, session_id
@@ -169,6 +170,7 @@ def home():
                 recent_workouts.append({
                     "date": r["date"],
                     "date_str": r["date"].strftime("%b %-d"),
+                    "title": r.get("session_title") or "",
                     "muscle_groups": muscles,
                     "set_count": r.get("set_count") or 0,
                     "total_volume": round(float(r.get("total_volume") or 0)),
@@ -853,7 +855,8 @@ def training():
                        ARRAY_AGG(DISTINCT muscle_group) AS muscles,
                        SUM(weight_lbs * reps) AS volume,
                        COUNT(*) AS total_sets,
-                       COUNT(DISTINCT exercise_name) AS exercise_count
+                       COUNT(DISTINCT exercise_name) AS exercise_count,
+                       MAX(session_title) AS session_title
                 FROM hevy_sets
                 WHERE date >= (current_date - interval '60 days')
                 GROUP BY date, session_id
@@ -881,6 +884,7 @@ def training():
                 recent_workouts.append({
                     "date": r["date"],
                     "date_str": r["date"].strftime("%b %-d"),
+                    "title": r.get("session_title") or "",
                     "exercises": exercises,
                     "muscle_groups": muscles,
                     "volume": round(float(r.get("volume") or 0)),

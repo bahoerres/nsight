@@ -432,7 +432,8 @@
   <div class="workout-scroll">
     {% for w in recent_workouts %}
     <{% if w.hevy_url %}a href="{{ w.hevy_url }}" target="_blank" rel="noopener"{% else %}div{% endif %} class="card workout-card" style="{% if w.hevy_url %}text-decoration:none; color:inherit;{% endif %}">
-      <div class="workout-card-date">{{ w.date_str }}</div>
+      <div class="workout-card-date">{% if w.title %}{{ w.title }}{% else %}{{ w.date_str }}{% endif %}</div>
+      {% if w.title %}<div style="font-size: 0.75rem; color: var(--text-muted);">{{ w.date_str }}</div>{% endif %}
       <div class="workout-card-meta">
         <span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>

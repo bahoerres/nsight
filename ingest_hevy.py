@@ -313,6 +313,7 @@ def process_workouts(workouts: list[dict]) -> tuple[list[dict], list[dict]]:
 
         for workout in day_workouts:
             session_id = workout.get("id", "")
+            session_title = workout.get("title", "")
 
             # duration
             start_str = workout.get("start_time", "")
@@ -349,6 +350,7 @@ def process_workouts(workouts: list[dict]) -> tuple[list[dict], list[dict]]:
                             "reps": reps,
                             "weight_lbs": weight_lbs,
                             "rpe": rpe,
+                            "session_title": session_title,
                         }
                     )
 
@@ -420,7 +422,7 @@ def upsert_sets(conn, rows: list[dict]):
             """
             INSERT INTO hevy_sets (
                 date, session_id, exercise_name, muscle_group,
-                set_index, reps, weight_lbs, rpe
+                set_index, reps, weight_lbs, rpe, session_title
             ) VALUES %s
         """,
             [
@@ -433,6 +435,7 @@ def upsert_sets(conn, rows: list[dict]):
                     r["reps"],
                     r["weight_lbs"],
                     r["rpe"],
+                    r["session_title"],
                 )
                 for r in rows
             ],
