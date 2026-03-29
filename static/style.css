@@ -27,7 +27,7 @@
   --score-poor: #ea6962;
 
   --sidebar-w: 240px;
-  --sidebar-collapsed: 42px;
+  --sidebar-collapsed: 60px;
   --content-max: 1200px;
   --radius-card: 12px;
   --radius-btn: 8px;
@@ -186,13 +186,15 @@ h4 { font-size: 1rem; }
   .sidebar-brand {
     padding: 24px 0 20px;
     justify-content: center;
+    gap: 0;
     overflow: hidden;
-    transition: padding 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: padding 0.25s cubic-bezier(0.4, 0, 0.2, 1), gap 0.25s ease;
   }
 
   .sidebar:hover .sidebar-brand {
     padding: 24px 20px 20px;
     justify-content: flex-start;
+    gap: 10px;
   }
 
   .sidebar-brand svg {
@@ -224,13 +226,15 @@ h4 { font-size: 1rem; }
   .sidebar-link {
     padding: 10px 0;
     justify-content: center;
+    gap: 0;
     overflow: hidden;
-    transition: all 0.15s ease, padding 0.25s ease;
+    transition: all 0.15s ease, padding 0.25s ease, gap 0.25s ease;
   }
 
   .sidebar:hover .sidebar-link {
     padding: 10px 14px;
     justify-content: flex-start;
+    gap: 12px;
   }
 
   .sidebar-link span {
@@ -285,7 +289,6 @@ h4 { font-size: 1rem; }
 
 /* ── Main Content ───────────────────────────────────────────────── */
 .main {
-  margin-left: var(--sidebar-w);
   min-height: 100vh;
 }
 
