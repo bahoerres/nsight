@@ -27,7 +27,7 @@
   --score-poor: #ea6962;
 
   --sidebar-w: 240px;
-  --sidebar-collapsed: 38px;
+  --sidebar-collapsed: 42px;
   --content-max: 1200px;
   --radius-card: 12px;
   --radius-btn: 8px;
@@ -180,16 +180,23 @@ h4 { font-size: 1rem; }
 
   .sidebar:hover {
     width: var(--sidebar-w);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
   }
 
   .sidebar-brand {
-    padding: 24px 9px 20px;
+    padding: 24px 0 20px;
+    justify-content: center;
     overflow: hidden;
     transition: padding 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .sidebar:hover .sidebar-brand {
     padding: 24px 20px 20px;
+    justify-content: flex-start;
+  }
+
+  .sidebar-brand svg {
+    flex-shrink: 0;
   }
 
   .sidebar-brand span {
@@ -215,7 +222,7 @@ h4 { font-size: 1rem; }
   }
 
   .sidebar-link {
-    padding: 10px 9px;
+    padding: 10px 0;
     justify-content: center;
     overflow: hidden;
     transition: all 0.15s ease, padding 0.25s ease;
@@ -241,7 +248,6 @@ h4 { font-size: 1rem; }
 
   .main {
     margin-left: var(--sidebar-collapsed);
-    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
