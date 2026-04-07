@@ -572,6 +572,10 @@ document.addEventListener('DOMContentLoaded', function() {
             },
           },
           tooltip: {
+            filter: function(item, data) {
+              var total = data.datasets.reduce(function(sum, ds) { return sum + (ds.data[item.dataIndex] || 0); }, 0);
+              return total > 0;
+            },
             callbacks: {
               label: function(item) {
                 var val = item.raw || 0;
