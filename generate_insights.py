@@ -7,7 +7,7 @@ with personalized context, and stores the resulting insights.
 
 Usage:
     python generate_insights.py              # generates whatever is due today
-    python generate_insights.py --daily      # force daily insight for yesterday
+    python generate_insights.py --daily      # daily morning report (about yesterday's data)
     python generate_insights.py --weekly     # force weekly insight
     python generate_insights.py --monthly    # force monthly insight
     python generate_insights.py --date 2026-03-15 --daily  # specific date
@@ -71,7 +71,13 @@ def store_insight(
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO insights (date, type, content, model, prompt_version, tokens_used)
-           VALUES (%s, %s, %s, %s, %s, %s)""",
+           VALUES (%s, %s, %s, %s, %s, %s)
+           ON CONFLICT (date, type) DO UPDATE SET
+               content = EXCLUDED.content,
+               model = EXCLUDED.model,
+               prompt_version = EXCLUDED.prompt_version,
+               tokens_used = EXCLUDED.tokens_used,
+               created_at = now()""",
         (target_date, insight_type, content, model, prompt_version, tokens_used),
     )
     conn.commit()
@@ -527,15 +533,22 @@ Do not include a title or heading — the UI already provides one. Write plain p
 def generate_insight(
     conn, target_date: date, insight_type: str, force: bool = False
 ) -> bool:
+    # For daily insights, target_date is the *report* date (today).
+    # The data comes from the previous day (yesterday).
+    if insight_type == "daily":
+        data_date = target_date - timedelta(days=1)
+    else:
+        data_date = target_date
+
     if not force and insight_exists(conn, target_date, insight_type):
         print(f"  Insight already exists for {target_date} ({insight_type}), skipping.")
         return False
 
     # Fetch data
     if insight_type == "daily":
-        data = fetch_daily_data(conn, target_date)
+        data = fetch_daily_data(conn, data_date)
         if not data:
-            print(f"  No data for {target_date}, skipping daily insight.")
+            print(f"  No data for {data_date}, skipping daily insight.")
             return False
         prompt = build_daily_prompt(data)
 
@@ -603,8 +616,10 @@ def backfill(conn, since: date, insight_type: str | None, delay: float, force: b
         print(f"Backfilling daily insights from {since}...")
         d = since
         while d < today:
+            # For daily, d is the data date; report date is d+1
+            report_date = d + timedelta(days=1)
             if has_sufficient_data(conn, d):
-                generate_insight(conn, d, "daily", force=force)
+                generate_insight(conn, report_date, "daily", force=force)
                 time.sleep(delay)
             else:
                 print(f"  {d}: insufficient data, skipping")
@@ -650,7 +665,7 @@ def main():
         "--monthly", action="store_true", help="Generate monthly insight"
     )
     parser.add_argument(
-        "--date", type=str, help="Target date (YYYY-MM-DD), default yesterday"
+        "--date", type=str, help="Target date (YYYY-MM-DD), default today for daily, yesterday for weekly/monthly"
     )
     parser.add_argument(
         "--force", action="store_true", help="Regenerate even if exists"
@@ -690,8 +705,15 @@ def main():
                 created_at      TIMESTAMPTZ DEFAULT now()
             )
         """)
+        # Migrate: replace non-unique index with unique constraint
+        # First, deduplicate any existing rows (keep the latest)
+        cur.execute("""
+            DELETE FROM insights a USING insights b
+            WHERE a.id < b.id AND a.date = b.date AND a.type = b.type
+        """)
+        cur.execute("DROP INDEX IF EXISTS idx_insights_date_type")
         cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_insights_date_type ON insights(date, type)"
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_insights_date_type ON insights(date, type)"
         )
         conn.commit()
 
@@ -703,22 +725,23 @@ def main():
             backfill(conn, since, args.type, args.delay, args.force)
             return
 
+        today = local_today()
         target = (
             datetime.strptime(args.date, "%Y-%m-%d").date()
             if args.date
-            else local_today() - timedelta(days=1)
+            else today
         )
 
         explicit = args.daily or args.weekly or args.monthly
 
         if not explicit:
             # Auto mode: generate whatever is due
-            today = local_today()
-            # Daily always runs
+            # Daily: target is today (report date); data is fetched for yesterday
             generate_insight(conn, target, "daily", force=args.force)
             # Weekly on Mondays (for the week ending yesterday/Sunday)
             if today.weekday() == 0:
-                generate_insight(conn, target, "weekly", force=args.force)
+                yesterday = today - timedelta(days=1)
+                generate_insight(conn, yesterday, "weekly", force=args.force)
             # Monthly on the 1st
             if today.day == 1:
                 last_month_end = today - timedelta(days=1)

@@ -28,6 +28,8 @@
 
   --sidebar-w: 240px;
   --sidebar-collapsed: 60px;
+  --shadow-sidebar: 4px 0 24px rgba(0, 0, 0, 0.4);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --content-max: 1200px;
   --radius-card: 12px;
   --radius-btn: 8px;
@@ -140,7 +142,7 @@ h4 { font-size: 1rem; }
   color: var(--text-secondary);
   font-size: 0.9rem;
   font-weight: 500;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
   min-height: 44px;
 }
 
@@ -174,13 +176,14 @@ h4 { font-size: 1rem; }
 @media (min-width: 769px) {
   .sidebar {
     width: var(--sidebar-collapsed);
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: width 0.25s var(--ease-standard);
     overflow: hidden;
   }
 
   .sidebar:hover {
     width: var(--sidebar-w);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-sidebar);
+    overflow-y: auto;
   }
 
   .sidebar-brand {
@@ -188,7 +191,7 @@ h4 { font-size: 1rem; }
     justify-content: center;
     gap: 0;
     overflow: hidden;
-    transition: padding 0.25s cubic-bezier(0.4, 0, 0.2, 1), gap 0.25s ease;
+    transition: padding 0.25s var(--ease-standard), gap 0.25s ease;
   }
 
   .sidebar:hover .sidebar-brand {
@@ -201,7 +204,8 @@ h4 { font-size: 1rem; }
     flex-shrink: 0;
   }
 
-  .sidebar-brand span {
+  .sidebar-brand span,
+  .sidebar-link span {
     opacity: 0;
     width: 0;
     overflow: hidden;
@@ -209,14 +213,15 @@ h4 { font-size: 1rem; }
     transition: opacity 0.15s ease, width 0.25s ease;
   }
 
-  .sidebar:hover .sidebar-brand span {
+  .sidebar:hover .sidebar-brand span,
+  .sidebar:hover .sidebar-link span {
     opacity: 1;
     width: auto;
   }
 
   .sidebar-nav {
     padding: 12px 4px;
-    transition: padding 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: padding 0.25s var(--ease-standard);
   }
 
   .sidebar:hover .sidebar-nav {
@@ -228,26 +233,13 @@ h4 { font-size: 1rem; }
     justify-content: center;
     gap: 0;
     overflow: hidden;
-    transition: all 0.15s ease, padding 0.25s ease, gap 0.25s ease;
+    transition: background 0.15s ease, color 0.15s ease, padding 0.25s ease, gap 0.25s ease;
   }
 
   .sidebar:hover .sidebar-link {
     padding: 10px 14px;
     justify-content: flex-start;
     gap: 12px;
-  }
-
-  .sidebar-link span {
-    opacity: 0;
-    width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    transition: opacity 0.15s ease, width 0.25s ease;
-  }
-
-  .sidebar:hover .sidebar-link span {
-    opacity: 1;
-    width: auto;
   }
 
   .main {
@@ -396,7 +388,7 @@ h4 { font-size: 1rem; }
   fill: none;
   stroke-width: 6;
   stroke-linecap: round;
-  transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: stroke-dashoffset 0.8s var(--ease-standard);
 }
 
 .score-circle-wrap {
@@ -622,12 +614,12 @@ h4 { font-size: 1rem; }
   .sidebar {
     width: var(--sidebar-w);
     transform: translateX(-100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.3s var(--ease-standard);
   }
 
   body.sidebar-open .sidebar {
     transform: translateX(0);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-sidebar);
   }
 
   body.sidebar-open .sidebar-overlay {
