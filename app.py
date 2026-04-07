@@ -932,13 +932,14 @@ def training():
             v = vol_by_date.get(d, 0)
             vol_data.append(v if v > 0 else None)
 
-            # 28-day moving average
+            # 28-day moving average (training days only)
             ma_vals = []
             for j in range(28):
                 md = d - timedelta(days=j)
                 v = ma_by_date.get(md, 0)
-                ma_vals.append(v)
-            vol_ma_data.append(round(sum(ma_vals) / len(ma_vals)) if ma_vals else 0)
+                if v > 0:
+                    ma_vals.append(v)
+            vol_ma_data.append(round(sum(ma_vals) / len(ma_vals)) if ma_vals else None)
 
         # ── ACWR (30 days) ──────────────────────────────────────────
         # Need ~58 days of lookback for 28-day chronic window
