@@ -218,6 +218,14 @@ function createBarChart(canvasId, labels, data, color, maData) {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        tooltip: {
+          filter: function(item) {
+            var barDs = item.chart.data.datasets[0];
+            return barDs.data[item.dataIndex] != null;
+          },
+        },
+      },
       scales: {
         x: { grid: { display: false } },
         y: { beginAtZero: true, ticks: { maxTicksLimit: 5 } },

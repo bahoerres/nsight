@@ -929,7 +929,8 @@ def training():
         for i in range(30):
             d = today - timedelta(days=29 - i)
             vol_labels.append(d.strftime("%-m/%-d"))
-            vol_data.append(vol_by_date.get(d, 0))
+            v = vol_by_date.get(d, 0)
+            vol_data.append(v if v > 0 else None)
 
             # 28-day moving average
             ma_vals = []
