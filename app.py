@@ -204,8 +204,9 @@ def home():
         weekly_date_labels = []   # full date strings for tooltips
         for i in range(7):
             d = week_start + timedelta(days=i)
-            weekly_labels.append(day_abbrev[d.weekday()])
-            weekly_date_labels.append(d.strftime("%a %-m/%-d"))
+            report_day = d + timedelta(days=1)  # label as the morning you see this data
+            weekly_labels.append(day_abbrev[report_day.weekday()])
+            weekly_date_labels.append(report_day.strftime("%a %-m/%-d"))
             row = daily_data.get(d)
             if row:
                 weekly_hr.append(float(row["resting_hr"]) if row.get("resting_hr") else 0)
