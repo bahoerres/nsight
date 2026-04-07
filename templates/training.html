@@ -572,8 +572,9 @@ document.addEventListener('DOMContentLoaded', function() {
             },
           },
           tooltip: {
-            filter: function(item, data) {
-              var total = data.datasets.reduce(function(sum, ds) { return sum + (ds.data[item.dataIndex] || 0); }, 0);
+            filter: function(item) {
+              var chart = item.chart;
+              var total = chart.data.datasets.reduce(function(sum, ds) { return sum + (ds.data[item.dataIndex] || 0); }, 0);
               return total > 0;
             },
             callbacks: {
