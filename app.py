@@ -361,6 +361,7 @@ def home():
         weekly_sleep=weekly_sleep,
         weekly_steps=weekly_steps,
         trends=trends,
+        carousel_insights=carousel_insights,
     )
 
 
@@ -405,21 +406,22 @@ def health():
             },
         )
 
-        # ── Insight chip (1 chip, different from hero text) ──────────
-        insight_chips = []
+        # ── Insight carousel (latest daily, weekly, monthly) ───────
+        carousel_insights = []
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT content FROM insights
-                WHERE type = 'daily'
-                ORDER BY date DESC
-                LIMIT 3
-            """)
-            for row in cur.fetchall():
-                content = row["content"] or ""
-                if content:
-                    insight_chips.append(content)
-                if len(insight_chips) >= 1:
-                    break
+            for itype in ("daily", "weekly", "monthly"):
+                cur.execute(
+                    "SELECT date, type, content FROM insights WHERE type = %s ORDER BY date DESC LIMIT 1",
+                    (itype,),
+                )
+                row = cur.fetchone()
+                if row:
+                    carousel_insights.append({
+                        "type": row["type"],
+                        "date": row["date"].strftime("%B %-d, %Y"),
+                        "content": row["content"],
+                        "label": {"daily": "Daily Insight", "weekly": "Weekly Summary", "monthly": "Monthly Review"}[row["type"]],
+                    })
 
         # ── Vital Trends (7-day sparkline + current + 90d avg + status) ──
         vital_metrics = [
