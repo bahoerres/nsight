@@ -27,4 +27,18 @@
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(function () {});
   }
+
+  /* ── Toast notifications ────────────────────────────────────── */
+  var toastTimer = null;
+
+  window.showToast = function(message, type) {
+    var el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = message;
+    el.className = 'toast toast-' + (type || 'info') + ' toast-visible';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() {
+      el.classList.remove('toast-visible');
+    }, 4000);
+  };
 })();
