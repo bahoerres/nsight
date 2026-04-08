@@ -3,9 +3,6 @@ Description=nsight nightly ingest timer
 
 [Timer]
 OnCalendar=*-*-* 10:00:00
-OnCalendar=*-*-* 11:00:00
-OnCalendar=*-*-* 12:00:00
-OnCalendar=*-*-* 13:00:00
 Persistent=true
 
 [Install]
