@@ -298,6 +298,43 @@
         <canvas id="spark-weight" width="80" height="32"></canvas>
       </div>
     </div>
+
+    {# ── Insight Carousel ─────────────────────────────────────────── #}
+    <div class="carousel-row">
+      {% if carousel_insights %}
+        <button class="carousel-arrow carousel-prev" aria-label="Previous insight">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+
+        {% for ins in carousel_insights %}
+        <div class="carousel-slide{% if loop.first %} carousel-active{% endif %}" data-type="{{ ins.type }}">
+          <div class="carousel-content md-content">{{ ins.content | md }}</div>
+          <div class="carousel-footer">
+            <span class="carousel-type-badge">{{ ins.label }}</span>
+            <span class="carousel-date">{{ ins.date }}</span>
+            <button class="carousel-regen" data-type="{{ ins.type }}" aria-label="Regenerate insight" title="Regenerate insight">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>
+                <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        {% endfor %}
+
+        <button class="carousel-arrow carousel-next" aria-label="Next insight">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </button>
+      {% else %}
+        <div class="carousel-empty">No insights yet — run a sync to get started.</div>
+      {% endif %}
+    </div>
   </div>
 </section>
 
@@ -517,6 +554,60 @@ document.addEventListener('DOMContentLoaded', function() {
   createSparkline('spark-sleep', trends.sleep_hours     ? trends.sleep_hours.sparkline     : [], '#7daea3');
   createSparkline('spark-cals',  trends.calories        ? trends.calories.sparkline        : [], '#e78a4e');
   createSparkline('spark-weight', trends.weight          ? trends.weight.sparkline          : [], '#d3869b');
+
+  // ── Insight Carousel ─────────────────────────────────────────
+  var slides = document.querySelectorAll('.carousel-slide');
+  var currentSlide = 0;
+
+  function showSlide(idx) {
+    slides.forEach(function(s) { s.classList.remove('carousel-active'); });
+    currentSlide = ((idx % slides.length) + slides.length) % slides.length;
+    slides[currentSlide].classList.add('carousel-active');
+  }
+
+  var prevBtn = document.querySelector('.carousel-prev');
+  var nextBtn = document.querySelector('.carousel-next');
+  if (prevBtn) prevBtn.addEventListener('click', function() { showSlide(currentSlide - 1); });
+  if (nextBtn) nextBtn.addEventListener('click', function() { showSlide(currentSlide + 1); });
+
+  // ── Carousel regenerate buttons ──────────────────────────────
+  document.querySelectorAll('.carousel-regen').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var type = btn.dataset.type;
+      if (btn.classList.contains('regenerating')) return;
+      btn.classList.add('regenerating');
+
+      fetch('/api/generate-insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: type }),
+      })
+        .then(function(res) {
+          if (res.status === 409) {
+            btn.classList.remove('regenerating');
+            showToast('Insight generation already running', 'info');
+            return;
+          }
+          // Poll for completion, then reload to get server-rendered markdown
+          var pollId = setInterval(function() {
+            fetch('/api/insight/' + type)
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.content) {
+                  clearInterval(pollId);
+                  btn.classList.remove('regenerating');
+                  showToast('Insight regenerated', 'success');
+                  setTimeout(function() { location.reload(); }, 1000);
+                }
+              });
+          }, 3000);
+        })
+        .catch(function() {
+          btn.classList.remove('regenerating');
+          showToast('Failed to regenerate insight', 'error');
+        });
+    });
+  });
 
 });
 </script>
