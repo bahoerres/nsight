@@ -802,3 +802,38 @@ h4 { font-size: 1rem; }
     bottom: 16px;
   }
 }
+
+/* ── Sidebar Sync Button ───────────────────────────────────────── */
+.sidebar-sync {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: auto;
+  padding: 16px 0;
+  cursor: pointer;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.sidebar-sync svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-sync:hover svg {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+.sidebar-sync.syncing svg {
+  animation: spin 1s linear infinite;
+  color: var(--green);
+  opacity: 1;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

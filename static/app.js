@@ -41,4 +41,42 @@
       el.classList.remove('toast-visible');
     }, 4000);
   };
+
+  /* ── Sidebar sync button ────────────────────────────────────── */
+  var syncBtn = document.getElementById('sync-btn');
+  if (syncBtn) {
+    syncBtn.addEventListener('click', function() {
+      if (syncBtn.classList.contains('syncing')) return;
+      syncBtn.classList.add('syncing');
+
+      fetch('/api/ingest', { method: 'POST' })
+        .then(function(res) {
+          if (res.status === 409) {
+            return res.json().then(function(data) {
+              syncBtn.classList.remove('syncing');
+              var msg = data.error === 'already_running'
+                ? 'Sync already running'
+                : 'Please wait — last sync was less than 5 minutes ago';
+              showToast(msg, 'info');
+            });
+          }
+          // 202 — poll for completion
+          var pollId = setInterval(function() {
+            fetch('/api/ingest/status')
+              .then(function(r) { return r.json(); })
+              .then(function(status) {
+                if (!status.running) {
+                  clearInterval(pollId);
+                  syncBtn.classList.remove('syncing');
+                  showToast('Sync complete', 'success');
+                }
+              });
+          }, 2000);
+        })
+        .catch(function() {
+          syncBtn.classList.remove('syncing');
+          showToast('Sync failed', 'error');
+        });
+    });
+  }
 })();
