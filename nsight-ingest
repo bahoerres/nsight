@@ -5,6 +5,13 @@
 
 set -euo pipefail
 
+NO_INSIGHTS=false
+for arg in "$@"; do
+  case "$arg" in
+    --no-insights) NO_INSIGHTS=true ;;
+  esac
+done
+
 NSIGHT_DIR="${NSIGHT_DIR:-$HOME/stacks/nsight}"
 VENV="$NSIGHT_DIR/.venv/bin/python"
 LOG_DIR="${LOG_DIR:-$HOME/.local/log/nsight}"
@@ -85,22 +92,27 @@ else
   log "nsight scores: FAILED (exit $?)"
 fi
 
-# Correlation insight (weekly, runs on Mondays)
-if [ "$(date +%u)" = "1" ]; then
-  log "--- Correlation insight ---"
-  if "$VENV" "$NSIGHT_DIR/generate_correlation_insight.py" >>"$LOG_FILE" 2>&1; then
-    log "Correlation insight: OK"
-  else
-    log "Correlation insight: FAILED (exit $?)"
+# Correlation insight (weekly, runs on Mondays) and daily insight
+if [ "$NO_INSIGHTS" = "false" ]; then
+  # Correlation insight (weekly, runs on Mondays)
+  if [ "$(date +%u)" = "1" ]; then
+    log "--- Correlation insight ---"
+    if "$VENV" "$NSIGHT_DIR/generate_correlation_insight.py" >>"$LOG_FILE" 2>&1; then
+      log "Correlation insight: OK"
+    else
+      log "Correlation insight: FAILED (exit $?)"
+    fi
   fi
-fi
 
-# Generate daily insight (runs after data is fresh)
-log "--- Daily insight ---"
-if "$VENV" "$NSIGHT_DIR/generate_insights.py" --daily >>"$LOG_FILE" 2>&1; then
-  log "Daily insight: OK"
+  # Generate daily insight (runs after data is fresh)
+  log "--- Daily insight ---"
+  if "$VENV" "$NSIGHT_DIR/generate_insights.py" --daily >>"$LOG_FILE" 2>&1; then
+    log "Daily insight: OK"
+  else
+    log "Daily insight: FAILED (exit $?)"
+  fi
 else
-  log "Daily insight: FAILED (exit $?)"
+  log "--- Skipping insights (--no-insights) ---"
 fi
 
 log "=== ingest complete ==="
