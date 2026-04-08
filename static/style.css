@@ -935,3 +935,26 @@ h4 { font-size: 1rem; }
   color: var(--text-muted);
   padding: 8px 0;
 }
+
+/* ── Insights Archive Regenerate Button ────────────────────────── */
+.insights-regen-btn {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  padding: 6px;
+  border-radius: var(--radius-btn);
+  color: var(--text-muted);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.insights-regen-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
+.insights-regen-btn.regenerating svg {
+  animation: spin 1s linear infinite;
+  color: var(--green);
+}

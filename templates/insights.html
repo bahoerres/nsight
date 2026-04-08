@@ -343,6 +343,14 @@
   {% if items %}
     <span class="insights-count">{{ items | length }}</span>
   {% endif %}
+  <button class="insights-regen-btn" id="archive-regen" data-type="{{ tab }}" aria-label="Regenerate {{ tab }} insight" title="Regenerate {{ tab }} insight">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="23 4 23 10 17 10"/>
+      <polyline points="1 20 1 14 7 14"/>
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>
+      <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>
+    </svg>
+  </button>
 </div>
 
 {# ── Cards or Empty State ───────────────────────────────────────────── #}
@@ -399,4 +407,47 @@
   </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var regenBtn = document.getElementById('archive-regen');
+  if (regenBtn) {
+    regenBtn.addEventListener('click', function() {
+      var type = regenBtn.dataset.type;
+      if (regenBtn.classList.contains('regenerating')) return;
+      regenBtn.classList.add('regenerating');
+
+      fetch('/api/generate-insight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: type }),
+      })
+        .then(function(res) {
+          if (res.status === 409) {
+            regenBtn.classList.remove('regenerating');
+            showToast('Insight generation already running', 'info');
+            return;
+          }
+          // Poll then reload
+          var pollId = setInterval(function() {
+            fetch('/api/insight/' + type)
+              .then(function(r) { return r.json(); })
+              .then(function() {
+                clearInterval(pollId);
+                regenBtn.classList.remove('regenerating');
+                showToast('Insight regenerated — reloading...', 'success');
+                setTimeout(function() { location.reload(); }, 1500);
+              });
+          }, 3000);
+        })
+        .catch(function() {
+          regenBtn.classList.remove('regenerating');
+          showToast('Failed to regenerate insight', 'error');
+        });
+    });
+  }
+});
+</script>
 {% endblock %}
