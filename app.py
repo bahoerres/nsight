@@ -1,13 +1,16 @@
 """nsight — personal health intelligence dashboard."""
 
 import os
+import subprocess
+import threading
+import time
 from datetime import date, datetime, timedelta
 
 import markdown
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, send_from_directory
+from flask import Flask, render_template, request, send_from_directory, jsonify
 from markupsafe import Markup
 from zoneinfo import ZoneInfo
 
@@ -2339,6 +2342,131 @@ def correlations_page():
         results=results,
         correlation_insight=correlation_insight,
     )
+
+
+# ── API: Data Sync & Insight Generation ─────────────────────────────
+
+
+INGEST_LOCK = "/tmp/nsight-ingest.lock"
+INSIGHT_LOCK = "/tmp/nsight-insight.lock"
+NSIGHT_DIR = os.path.dirname(os.path.abspath(__file__))
+COOLDOWN_SEC = 300  # 5 minutes
+
+
+def _check_lock(lockfile):
+    """Check if a lockfile exists and is recent. Returns (running, cooldown)."""
+    if not os.path.exists(lockfile):
+        return False, False
+    try:
+        mtime = os.path.getmtime(lockfile)
+        age = time.time() - mtime
+        with open(lockfile) as f:
+            pid = int(f.read().strip())
+        try:
+            os.kill(pid, 0)
+            return True, False
+        except OSError:
+            pass
+        return False, age < COOLDOWN_SEC
+    except (ValueError, FileNotFoundError):
+        return False, False
+
+
+def _write_lock(lockfile, pid):
+    with open(lockfile, "w") as f:
+        f.write(str(pid))
+
+
+def _remove_lock(lockfile):
+    try:
+        os.remove(lockfile)
+    except FileNotFoundError:
+        pass
+
+
+def _spawn_and_track(cmd, lockfile):
+    """Spawn a subprocess, write its PID to lockfile, clean up when done."""
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    _write_lock(lockfile, proc.pid)
+
+    def _wait():
+        proc.wait()
+        _remove_lock(lockfile)
+
+    threading.Thread(target=_wait, daemon=True).start()
+
+
+@app.route("/api/ingest", methods=["POST"])
+def api_ingest():
+    running, cooldown = _check_lock(INGEST_LOCK)
+    if running:
+        return jsonify({"error": "already_running"}), 409
+    if cooldown:
+        return jsonify({"error": "cooldown"}), 409
+
+    script = os.path.join(NSIGHT_DIR, "nsight-ingest")
+    _spawn_and_track(["bash", script, "--no-insights"], INGEST_LOCK)
+    return jsonify({"status": "started"}), 202
+
+
+@app.route("/api/ingest/status")
+def api_ingest_status():
+    running, _ = _check_lock(INGEST_LOCK)
+    last_run = None
+    if os.path.exists(INGEST_LOCK):
+        last_run = datetime.fromtimestamp(
+            os.path.getmtime(INGEST_LOCK), tz=LOCAL_TZ
+        ).isoformat()
+    return jsonify({"running": running, "last_run": last_run})
+
+
+@app.route("/api/generate-insight", methods=["POST"])
+def api_generate_insight():
+    data = request.get_json(force=True)
+    insight_type = data.get("type", "daily")
+    if insight_type not in ("daily", "weekly", "monthly"):
+        return jsonify({"error": "invalid_type"}), 400
+
+    running, cooldown = _check_lock(INSIGHT_LOCK)
+    if running:
+        return jsonify({"error": "already_running"}), 409
+    if cooldown:
+        return jsonify({"error": "cooldown"}), 409
+
+    venv_python = os.path.join(NSIGHT_DIR, ".venv", "bin", "python")
+    script = os.path.join(NSIGHT_DIR, "generate_insights.py")
+    _spawn_and_track([venv_python, script, f"--{insight_type}", "--force"], INSIGHT_LOCK)
+    return jsonify({"status": "started", "type": insight_type}), 202
+
+
+@app.route("/api/insight/<insight_type>")
+def api_insight(insight_type):
+    if insight_type not in ("daily", "weekly", "monthly"):
+        return jsonify({"error": "invalid_type"}), 400
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT date, type, content FROM insights WHERE type = %s ORDER BY date DESC LIMIT 1",
+                (insight_type,),
+            )
+            row = cur.fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        return jsonify({"date": None, "type": insight_type, "content": None})
+
+    return jsonify({
+        "date": row["date"].strftime("%B %-d, %Y"),
+        "type": row["type"],
+        "content": row["content"],
+    })
 
 
 # ── Run ─────────────────────────────────────────────────────────────
