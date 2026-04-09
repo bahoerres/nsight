@@ -864,8 +864,6 @@ h4 { font-size: 1rem; }
   font-size: 0.85rem;
   line-height: 1.55;
   color: var(--text-secondary);
-  max-height: 4.65em;
-  overflow: hidden;
 }
 
 .carousel-content p {
