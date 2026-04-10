@@ -343,7 +343,7 @@ def fetch_session_detail(conn, target_date: date) -> list[dict]:
     """
     cur = conn.cursor()
 
-    # Top set per exercise (heaviest weight, tiebreak by reps)
+    # Top set per exercise (heaviest weight, tiebreak by reps) — working sets only
     cur.execute(
         """WITH ranked AS (
                SELECT exercise_name, muscle_group, weight_lbs, reps, rpe,
@@ -353,6 +353,7 @@ def fetch_session_detail(conn, target_date: date) -> list[dict]:
                       ) as rn
                FROM hevy_sets
                WHERE date = %s AND weight_lbs IS NOT NULL AND reps > 0
+                 AND COALESCE(set_type, 'normal') != 'warmup'
            )
            SELECT exercise_name, muscle_group, weight_lbs, reps, rpe
            FROM ranked WHERE rn = 1
@@ -363,21 +364,38 @@ def fetch_session_detail(conn, target_date: date) -> list[dict]:
     if not top_sets:
         return []
 
-    # PR detection: for each exercise, find prior best at same or higher reps
+    # PR detection: for each exercise, find prior best at same or higher reps (working sets only)
     for s in top_sets:
+        # Check if this is an established lift (3+ prior sessions)
+        cur.execute(
+            """SELECT COUNT(DISTINCT date) as prior_sessions
+               FROM hevy_sets
+               WHERE exercise_name = %s AND date < %s
+                 AND COALESCE(set_type, 'normal') != 'warmup'
+                 AND weight_lbs IS NOT NULL""",
+            (s["exercise_name"], target_date),
+        )
+        hist = cur.fetchone()
+        s["prior_sessions"] = hist["prior_sessions"] if hist else 0
+
         cur.execute(
             """SELECT MAX(weight_lbs) as prev_best
                FROM hevy_sets
                WHERE exercise_name = %s
                  AND date < %s
                  AND reps >= %s
-                 AND weight_lbs IS NOT NULL""",
+                 AND weight_lbs IS NOT NULL
+                 AND COALESCE(set_type, 'normal') != 'warmup'""",
             (s["exercise_name"], target_date, s["reps"]),
         )
         row = cur.fetchone()
         prev = float(row["prev_best"]) if row and row["prev_best"] else None
         s["prev_best_weight"] = prev
-        s["is_pr"] = prev is None or float(s["weight_lbs"]) > prev
+        s["is_pr"] = (
+            prev is not None
+            and float(s["weight_lbs"]) > prev
+            and s["prior_sessions"] >= 3
+        )
 
     return top_sets
 
@@ -389,7 +407,7 @@ def fetch_weekly_exercise_data(conn, week_start: date, week_end: date) -> dict:
     """
     cur = conn.cursor()
 
-    # Best working set per exercise this week
+    # Best working set per exercise this week (exclude warmups)
     cur.execute(
         """WITH ranked AS (
                SELECT exercise_name, muscle_group, weight_lbs, reps, date,
@@ -399,6 +417,7 @@ def fetch_weekly_exercise_data(conn, week_start: date, week_end: date) -> dict:
                       ) as rn
                FROM hevy_sets
                WHERE date BETWEEN %s AND %s AND weight_lbs IS NOT NULL AND reps > 0
+                 AND COALESCE(set_type, 'normal') != 'warmup'
            )
            SELECT exercise_name, muscle_group, weight_lbs, reps, date
            FROM ranked WHERE rn = 1
@@ -415,52 +434,56 @@ def fetch_weekly_exercise_data(conn, week_start: date, week_end: date) -> dict:
 
     for ex in this_week:
         cur.execute(
-            """SELECT MAX(weight_lbs) as prev_best, MAX(reps) FILTER (WHERE weight_lbs = (
-                   SELECT MAX(weight_lbs) FROM hevy_sets
-                   WHERE exercise_name = %s AND date BETWEEN %s AND %s
-                     AND weight_lbs IS NOT NULL AND reps > 0
-               )) as prev_best_reps
+            """SELECT MAX(weight_lbs) as prev_best
                FROM hevy_sets
                WHERE exercise_name = %s AND date BETWEEN %s AND %s
-                 AND weight_lbs IS NOT NULL AND reps > 0""",
-            (
-                ex["exercise_name"],
-                prior_start,
-                prior_end,
-                ex["exercise_name"],
-                prior_start,
-                prior_end,
-            ),
+                 AND weight_lbs IS NOT NULL AND reps > 0
+                 AND COALESCE(set_type, 'normal') != 'warmup'""",
+            (ex["exercise_name"], prior_start, prior_end),
         )
         prev = cur.fetchone()
         prev_weight = float(prev["prev_best"]) if prev and prev["prev_best"] else None
         ex["prev_4wk_best"] = prev_weight
 
-        # Check all-time PR
+        # Check all-time PR (only for established lifts with 3+ prior sessions)
         cur.execute(
-            """SELECT MAX(weight_lbs) as all_time_best
+            """SELECT COUNT(DISTINCT date) as prior_sessions
                FROM hevy_sets
                WHERE exercise_name = %s AND date < %s
-                 AND reps >= %s AND weight_lbs IS NOT NULL""",
-            (ex["exercise_name"], week_start, ex["reps"]),
+                 AND COALESCE(set_type, 'normal') != 'warmup'
+                 AND weight_lbs IS NOT NULL""",
+            (ex["exercise_name"], week_start),
         )
-        at_row = cur.fetchone()
-        at_best = (
-            float(at_row["all_time_best"])
-            if at_row and at_row["all_time_best"]
-            else None
-        )
-        if at_best is None or float(ex["weight_lbs"]) > at_best:
-            prs.append(ex)
+        hist = cur.fetchone()
+        prior_sessions = hist["prior_sessions"] if hist else 0
+
+        if prior_sessions >= 3:
+            cur.execute(
+                """SELECT MAX(weight_lbs) as all_time_best
+                   FROM hevy_sets
+                   WHERE exercise_name = %s AND date < %s
+                     AND reps >= %s AND weight_lbs IS NOT NULL
+                     AND COALESCE(set_type, 'normal') != 'warmup'""",
+                (ex["exercise_name"], week_start, ex["reps"]),
+            )
+            at_row = cur.fetchone()
+            at_best = (
+                float(at_row["all_time_best"])
+                if at_row and at_row["all_time_best"]
+                else None
+            )
+            if at_best is None or float(ex["weight_lbs"]) > at_best:
+                prs.append(ex)
 
         exercises.append(ex)
 
-    # Volume by muscle group this week vs last week
+    # Volume by muscle group this week vs last week (exclude warmups)
     cur.execute(
         """SELECT muscle_group,
                   ROUND(SUM(weight_lbs * reps)::numeric, 0) as volume
            FROM hevy_sets
            WHERE date BETWEEN %s AND %s AND weight_lbs IS NOT NULL AND reps > 0
+             AND COALESCE(set_type, 'normal') != 'warmup'
            GROUP BY muscle_group
            ORDER BY volume DESC""",
         (week_start, week_end),
@@ -472,6 +495,7 @@ def fetch_weekly_exercise_data(conn, week_start: date, week_end: date) -> dict:
                   ROUND(SUM(weight_lbs * reps)::numeric, 0) as volume
            FROM hevy_sets
            WHERE date BETWEEN %s AND %s AND weight_lbs IS NOT NULL AND reps > 0
+             AND COALESCE(set_type, 'normal') != 'warmup'
            GROUP BY muscle_group
            ORDER BY volume DESC""",
         (prior_end - timedelta(days=6), prior_end),
@@ -493,7 +517,7 @@ def fetch_monthly_exercise_data(conn, month_start: date, month_end: date) -> dic
     """
     cur = conn.cursor()
 
-    # Best working set per exercise per week across the month
+    # Best working set per exercise per week across the month (exclude warmups)
     cur.execute(
         """WITH weekly_best AS (
                SELECT exercise_name, muscle_group, weight_lbs, reps, date,
@@ -504,6 +528,7 @@ def fetch_monthly_exercise_data(conn, month_start: date, month_end: date) -> dic
                       ) as rn
                FROM hevy_sets
                WHERE date BETWEEN %s AND %s AND weight_lbs IS NOT NULL AND reps > 0
+                 AND COALESCE(set_type, 'normal') != 'warmup'
            )
            SELECT exercise_name, muscle_group, weight_lbs, reps, week_start
            FROM weekly_best WHERE rn = 1
@@ -529,7 +554,7 @@ def fetch_monthly_exercise_data(conn, month_start: date, month_end: date) -> dic
     # Filter to exercises with 2+ weeks of data (can actually show a trend)
     progressions = {k: v for k, v in progressions.items() if len(v["weeks"]) >= 2}
 
-    # True PR detection: exercises where month's best beat all prior history at same+ reps
+    # True PR detection: established lifts (3+ prior sessions) where month's best beat all prior
     cur.execute(
         """WITH month_best AS (
                SELECT exercise_name, weight_lbs, reps,
@@ -539,23 +564,33 @@ def fetch_monthly_exercise_data(conn, month_start: date, month_end: date) -> dic
                       ) as rn
                FROM hevy_sets
                WHERE date BETWEEN %s AND %s AND weight_lbs IS NOT NULL AND reps > 0
+                 AND COALESCE(set_type, 'normal') != 'warmup'
            ),
            top AS (
                SELECT exercise_name, weight_lbs, reps FROM month_best WHERE rn = 1
+           ),
+           history AS (
+               SELECT exercise_name, COUNT(DISTINCT date) as prior_sessions
+               FROM hevy_sets
+               WHERE date < %s AND weight_lbs IS NOT NULL
+                 AND COALESCE(set_type, 'normal') != 'warmup'
+               GROUP BY exercise_name
            ),
            prior AS (
                SELECT t.exercise_name, MAX(h.weight_lbs) as prior_best
                FROM top t
                LEFT JOIN hevy_sets h ON h.exercise_name = t.exercise_name
                    AND h.date < %s AND h.reps >= t.reps AND h.weight_lbs IS NOT NULL
+                   AND COALESCE(h.set_type, 'normal') != 'warmup'
                GROUP BY t.exercise_name
            )
            SELECT t.exercise_name, t.weight_lbs, t.reps, p.prior_best
            FROM top t
+           JOIN history hi ON hi.exercise_name = t.exercise_name AND hi.prior_sessions >= 3
            LEFT JOIN prior p ON p.exercise_name = t.exercise_name
            WHERE p.prior_best IS NULL OR t.weight_lbs > p.prior_best
            ORDER BY t.weight_lbs DESC""",
-        (month_start, month_end, month_start),
+        (month_start, month_end, month_start, month_start),
     )
     prs = [dict(r) for r in cur.fetchall()]
 
@@ -564,6 +599,7 @@ def fetch_monthly_exercise_data(conn, month_start: date, month_end: date) -> dic
         """SELECT muscle_group, COUNT(DISTINCT date) as session_days
            FROM hevy_sets
            WHERE date BETWEEN %s AND %s AND muscle_group != 'other'
+             AND COALESCE(set_type, 'normal') != 'warmup'
            GROUP BY muscle_group
            ORDER BY session_days DESC""",
         (month_start, month_end),

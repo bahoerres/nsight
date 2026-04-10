@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS hevy_sets (
     reps            INT,
     weight_lbs      NUMERIC(6,1),
     rpe             NUMERIC(3,1),        -- rate of perceived exertion, if logged
+    set_type        TEXT DEFAULT 'normal', -- normal, warmup, dropset, failure
     session_title   TEXT,                -- workout title from Hevy (e.g. "Upper C")
     created_at      TIMESTAMPTZ DEFAULT now()
 );

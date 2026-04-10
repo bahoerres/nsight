@@ -114,7 +114,6 @@ def kg_to_lbs(kg):
 MUSCLE_MAP = {
     # chest
     "Legend Chess Press": "chest",
-    "Bench Press (Smith Machine)": "chest",
     "High Incline Smith Press": "chest",
     "Incline Bench Press (Smith Machine)": "chest",
     "Incline Hammer Press": "chest",
@@ -151,6 +150,7 @@ MUSCLE_MAP = {
     "Seated Curl (Dumbbell)": "biceps",
     "Preacher Curl (Machine)": "biceps",
     # triceps
+    "Bench Press (Smith Machine)": "triceps",
     "Skullcrusher (Barbell)": "triceps",
     "Triceps Extension (Cable)": "triceps",
     "Triceps Pushdown": "triceps",
@@ -333,6 +333,7 @@ def process_workouts(workouts: list[dict]) -> tuple[list[dict], list[dict]]:
                     weight_kg = s.get("weight_kg")
                     weight_lbs = kg_to_lbs(weight_kg)
                     rpe = s.get("rpe")
+                    set_type = s.get("set_type", "normal")
 
                     # only count sets with actual reps
                     if reps and reps > 0:
@@ -350,6 +351,7 @@ def process_workouts(workouts: list[dict]) -> tuple[list[dict], list[dict]]:
                             "reps": reps,
                             "weight_lbs": weight_lbs,
                             "rpe": rpe,
+                            "set_type": set_type,
                             "session_title": session_title,
                         }
                     )
@@ -422,7 +424,7 @@ def upsert_sets(conn, rows: list[dict]):
             """
             INSERT INTO hevy_sets (
                 date, session_id, exercise_name, muscle_group,
-                set_index, reps, weight_lbs, rpe, session_title
+                set_index, reps, weight_lbs, rpe, set_type, session_title
             ) VALUES %s
         """,
             [
@@ -435,6 +437,7 @@ def upsert_sets(conn, rows: list[dict]):
                     r["reps"],
                     r["weight_lbs"],
                     r["rpe"],
+                    r["set_type"],
                     r["session_title"],
                 )
                 for r in rows
