@@ -272,6 +272,58 @@ MUSCLE_MAP = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Bodyweight exercise handling
+# Hevy sends weight_kg=0 for these; substitute athlete's bodyweight
+# For "(Weighted)" variants, Hevy sends only the added weight — add BW on top
+# ---------------------------------------------------------------------------
+
+BODYWEIGHT_EXERCISES = {
+    "Chin Up",
+    "Pull Up",
+    "Dip",
+    "Chest Dip",
+    "Chest Dip (Assisted)",
+    "Push Up",
+    "Decline Push Up",
+    "Muscle Up",
+    "Inverted Row",
+    "Hanging Knee Raise",
+    "Hanging Leg Raise",
+    "Glute Ham Raise",
+    "GHR Reverse Crunch",
+    "Back Extension (Hyperextension)",
+    "Reverse Hyperextension",
+    "Plank",
+    "Side Plank",
+    "Ab Wheel",
+    "Seated Dip Machine",
+}
+
+# Weighted variants: Hevy records only the added load — total = BW + added
+WEIGHTED_BODYWEIGHT_EXERCISES = {
+    "Chin Up (Weighted)",
+    "Chest Dip (Weighted)",
+    "Triceps Dip (Weighted)",
+    "Sissy Squat (Weighted)",
+    "Back Extension (Weighted Hyperextension)",
+}
+
+
+def get_recent_bodyweight(conn) -> float | None:
+    """Get most recent body_weight_lbs from daily_log (Garmin source)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT body_weight_lbs FROM daily_log
+            WHERE body_weight_lbs IS NOT NULL
+            ORDER BY date DESC LIMIT 1
+            """
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
 def infer_muscle_group(exercise_name: str) -> str:
     # exact match first
     if exercise_name in MUSCLE_MAP:
@@ -290,11 +342,15 @@ def infer_muscle_group(exercise_name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def process_workouts(workouts: list[dict]) -> tuple[list[dict], list[dict]]:
+def process_workouts(
+    workouts: list[dict], athlete_bw: float | None = None
+) -> tuple[list[dict], list[dict]]:
     """
     Returns:
         daily_rows: list of dicts to upsert into daily_log
         set_rows:   list of dicts to upsert into hevy_sets
+
+    athlete_bw: bodyweight in lbs, used for bodyweight exercise volume.
     """
     # group by date (multiple sessions possible on one day)
     by_date = defaultdict(list)
@@ -335,11 +391,24 @@ def process_workouts(workouts: list[dict]) -> tuple[list[dict], list[dict]]:
                     rpe = s.get("rpe")
                     set_type = s.get("set_type", "normal")
 
+                    # Bodyweight substitution
+                    effective_weight = weight_lbs
+                    if exercise_name in WEIGHTED_BODYWEIGHT_EXERCISES and athlete_bw:
+                        # Weighted variant: Hevy has added load only → add BW
+                        added = weight_lbs or 0
+                        effective_weight = athlete_bw + added
+                    elif (
+                        not effective_weight
+                        and exercise_name in BODYWEIGHT_EXERCISES
+                        and athlete_bw
+                    ):
+                        effective_weight = athlete_bw
+
                     # only count sets with actual reps
                     if reps and reps > 0:
                         total_sets += 1
-                        if weight_lbs:
-                            total_volume += reps * weight_lbs
+                        if effective_weight:
+                            total_volume += reps * effective_weight
 
                     set_rows.append(
                         {
@@ -349,7 +418,7 @@ def process_workouts(workouts: list[dict]) -> tuple[list[dict], list[dict]]:
                             "muscle_group": muscle_group,
                             "set_index": i,
                             "reps": reps,
-                            "weight_lbs": weight_lbs,
+                            "weight_lbs": effective_weight,
                             "rpe": rpe,
                             "set_type": set_type,
                             "session_title": session_title,
@@ -482,10 +551,17 @@ def main():
         log.info("No workouts found in range")
         return
 
-    daily_rows, set_rows = process_workouts(workouts)
+    conn = get_db()
+
+    athlete_bw = get_recent_bodyweight(conn)
+    if athlete_bw:
+        log.info(f"Using athlete bodyweight: {athlete_bw} lbs")
+    else:
+        log.warning("No bodyweight found in daily_log — bodyweight exercises will have 0 volume")
+
+    daily_rows, set_rows = process_workouts(workouts, athlete_bw=athlete_bw)
     log.info(f"Processed {len(daily_rows)} training days, {len(set_rows)} sets")
 
-    conn = get_db()
     upsert_daily_hevy(conn, daily_rows)
     log.info(f"Upserted {len(daily_rows)} daily_log rows")
     upsert_sets(conn, set_rows)
