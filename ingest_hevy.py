@@ -321,7 +321,7 @@ def get_recent_bodyweight(conn) -> float | None:
             """
         )
         row = cur.fetchone()
-    return row[0] if row else None
+    return float(row[0]) if row else None
 
 
 def infer_muscle_group(exercise_name: str) -> str:
