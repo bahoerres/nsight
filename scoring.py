@@ -436,28 +436,57 @@ def compute_training_score(conn, target_date):
             # > 1.7: high injury risk zone
             acwr_score = _clamp(95 - ((1.7 - 1.3) / 0.1) * 12 - ((acwr - 1.7) / 0.1) * 20)
 
-    # --- Volume trend: today's volume vs 28-day average ---
-    sql_vol = """
-        SELECT
-            (SELECT hevy_total_volume_lbs FROM daily_log WHERE date = %s) AS today_vol,
-            (SELECT AVG(hevy_total_volume_lbs)
-             FROM daily_log
-             WHERE date >= %s AND date < %s
-               AND hevy_total_volume_lbs IS NOT NULL
-               AND hevy_session_count > 0) AS avg_vol_28d
-    """
+    # --- Volume trend: today's volume vs 28-day avg of similar sessions ---
     vol_start = target_date - timedelta(days=28)
+
+    # Step 1: get today's volume and muscle groups
     with conn.cursor() as cur:
-        cur.execute(sql_vol, (target_date, vol_start, target_date))
+        cur.execute(
+            "SELECT hevy_total_volume_lbs, hevy_muscle_groups FROM daily_log WHERE date = %s",
+            (target_date,),
+        )
         row = cur.fetchone()
 
-    today_vol   = _f(row.get("today_vol"))  if row else None
-    avg_vol_28d = _f(row.get("avg_vol_28d")) if row else None
+    today_vol = _f(row.get("hevy_total_volume_lbs")) if row else None
+    today_muscles = row.get("hevy_muscle_groups") if row else None
+
+    # Step 2: get 28-day avg, preferring sessions with overlapping muscle groups
+    avg_vol = None
+    if today_muscles:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT AVG(hevy_total_volume_lbs) AS avg_vol
+                FROM daily_log
+                WHERE date >= %s AND date < %s
+                  AND hevy_total_volume_lbs IS NOT NULL
+                  AND hevy_session_count > 0
+                  AND hevy_muscle_groups && %s
+                """,
+                (vol_start, target_date, list(today_muscles)),
+            )
+            r = cur.fetchone()
+            avg_vol = _f(r.get("avg_vol")) if r else None
+
+    # Fallback: all-sessions average if no muscle group match or no similar sessions
+    if avg_vol is None:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT AVG(hevy_total_volume_lbs) AS avg_vol
+                FROM daily_log
+                WHERE date >= %s AND date < %s
+                  AND hevy_total_volume_lbs IS NOT NULL
+                  AND hevy_session_count > 0
+                """,
+                (vol_start, target_date),
+            )
+            r = cur.fetchone()
+            avg_vol = _f(r.get("avg_vol")) if r else None
 
     volume_score = None
-    if today_vol is not None and avg_vol_28d is not None and avg_vol_28d > 0:
-        # On a training day: compare volume vs avg
-        volume_score = _score_component(today_vol, avg_vol_28d, higher_is_better=True)
+    if today_vol is not None and avg_vol is not None and avg_vol > 0:
+        volume_score = _score_component(today_vol, avg_vol, higher_is_better=True)
     elif today_vol is None or today_vol == 0:
         # Rest day — neutral score for volume component (expected in DoggCrapp)
         volume_score = 80
