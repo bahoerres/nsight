@@ -1,190 +1,113 @@
-# nsight standalone migration — roadmap
+# nsight roadmap
 
-**Goal:** Absorb healthdash's backend (ingest, insights, schema, orchestration) into nsight. Decommission healthdash's web frontend. End state: nsight is the single repo for the entire health stack.
+**Last updated:** 2026-04-12
 
-**Current state:** nsight serves all user-facing pages but depends on healthdash for data ingest (Garmin, Hevy, Cronometer), insight generation (daily/weekly/monthly), schema management, and nightly orchestration. Both apps read/write the same Postgres database (`healthdash` on localhost:5432).
-
----
-
-## Phase 1: Absorb backend scripts
-
-Copy healthdash's backend into nsight. No behavior changes — just moving files and fixing paths.
-
-### 1.1 Ingest scripts
-
-- Copy `ingest_garmin.py`, `ingest_hevy.py`, `cronometer/ingest_cronometer.py` into `nsight/ingest/`
-- Each script uses `upsert_daily()` patterns with `ON CONFLICT (date) DO UPDATE` — fully idempotent, safe to re-run
-- Update imports: `from tz import today` needs `tz.py` (nsight already has one — verify they match, use nsight's)
-- Dependencies to add to `requirements.txt`: `garminconnect` (Garmin), `requests` (Hevy API)
-
-### 1.2 Insight generation
-
-- Copy `generate_insights.py` into `nsight/`
-- Copy `athlete_context.txt` into `nsight/`
-- Fix `generate_correlation_insight.py` — it currently tries to load athlete_context from `../healthdash/` path. Update to look in nsight's own directory
-- The `run_correlations_for_display()` function already lives in nsight's `app.py` — the import in `generate_correlation_insight.py` already points there
-
-### 1.3 Schema
-
-- Copy `schema.sql` into `nsight/` (healthdash's copy was the source of truth)
-- nsight's copy already has the `nsight_*` score columns added this session
-- Verify the CHECK constraint on `insights.type` includes all types: `daily`, `weekly`, `monthly`, `correlation`, `sleep`, `recovery`
-
-### 1.4 Derived metrics
-
-- `correlations.py` from healthdash computes ACWR, rolling baselines, anomaly flags into `derived_daily`
-- nsight's `scoring.py` already computes its own baselines via `fetch_baselines()` — these are query-time, not materialized
-- Decision: `derived_daily` is only read by healthdash's old frontend (for anomaly badges). nsight doesn't use it. **Skip copying `correlations.py` for now** — the correlation analysis for the correlations page is already in nsight's `app.py` (`run_correlations_for_display`)
-
-### 1.5 Docker Compose
-
-- Copy `docker-compose.yml` into `nsight/` — this runs the Postgres container
-- The database name stays `healthdash` (renaming is cosmetic and risky for no benefit)
+nsight is the single repo for the entire health stack. The healthdash → nsight migration (original purpose of this doc) is complete. This roadmap tracks what's been done, what's known to need work, and ideas that need further discussion.
 
 ---
 
-## Phase 2: Orchestration
+## Completed
 
-Replace healthdash's ingest pipeline with nsight's own.
+### Migration (formerly Phases 1-4)
 
-### 2.1 New ingest script
+- [x] Absorb all backend scripts (ingest_garmin, ingest_hevy, cronometer, scoring, insights)
+- [x] Schema, compose, .env, credentials — all consolidated
+- [x] Systemd services (nsight-web, nsight-ingest timer)
+- [x] Decommission healthdash frontend, timers, and deploy keys
+- [x] All pages built: home, health, sleep, recovery, training, nutrition, checkin, insights, correlations
 
-Create `nsight/ingest.sh` (replaces `healthdash/healthdash-ingest.sh`):
+### Recent fixes (2026-04-12 audit sweep)
 
-```
-Garmin ingest (--days 2)
-Hevy ingest (--days 30)
-Cronometer export + ingest
-Materialize nsight scores (--days 2)     ← already exists
-Correlation insight (weekly, Mondays)     ← already exists
-Daily insight generation
-Weekly insight (Mondays)
-Monthly insight (1st of month)
-```
+- [x] Fix correlation insight generator (key mismatch, stale CHECK constraint, dead model ID)
+- [x] Add correlation type to insight API endpoints
+- [x] Add regenerate button to correlations page
+- [x] Infra cleanup: timer reload (was 4x/day → 1x/day), ghost healthdash units, old logs/keys
 
-All paths reference `nsight/` instead of bouncing between repos.
+### Data & scoring improvements
 
-### 2.2 Credentials
-
-- Copy `.env` from healthdash → nsight (or symlink)
-- Keys needed: `DATABASE_URL`, `GARMIN_EMAIL`, `GARMIN_PASSWORD`, `HEVY_API_KEY`, `CRONOMETER_EMAIL`, `CRONOMETER_PASSWORD`, `ANTHROPIC_API_KEY`
-- nsight's existing `.env` only has `DATABASE_URL` and `TZ` — add the rest
-
-### 2.3 Systemd services
-
-Create new systemd units in `nsight/systemd/`:
-
-| Unit | Replaces | Schedule |
-|------|----------|----------|
-| `nsight-web.service` | (already exists) | always-on |
-| `nsight-ingest.service` + `.timer` | `healthdash-ingest.*` | daily 10:00 UTC |
-| `nsight-insights.service` + `.timer` | `healthdash-insights.*` | daily (after ingest) |
-| `nsight-insights-weekly.service` + `.timer` | `healthdash-insights-weekly.*` | Sundays |
-| `nsight-insights-monthly.service` + `.timer` | `healthdash-insights-monthly.*` | 1st of month |
-
-Since `ingest.sh` already handles insight generation at the end of the pipeline, the separate insight timers may be unnecessary. Consider consolidating into just `nsight-ingest.*` that runs the full pipeline.
+- [x] Volume trend compares against same-type sessions, not all sessions (scoring.py)
+- [x] Bodyweight substitution for BW exercises in Hevy volume
+- [x] Warmup set filtering + set_type tracking
+- [x] Insight engine v3: exercise-level training detail + signal filtering
+- [x] Rolling current insights (weekly_current, monthly_current)
+- [x] Friday week-start alignment for training week
+- [x] Volume trend MA averages training days only, not rest days
+- [x] Sync button with polling and toast feedback
+- [x] Insight carousel on health page
+- [x] PWA setup
 
 ---
 
-## Phase 3: Deploy and cut over
+## Known issues / tech debt
 
-### 3.1 Deploy nsight standalone
+### Cosmetic healthdash naming
 
-- Push all changes to nsight repo
-- SSH to docker-top, `git pull` in `/home/sysadmin/stacks/nsight/`
-- `pip install -r requirements.txt` (new deps: garminconnect, etc.)
-- Copy `.env` with all credentials
-- Install new systemd units, enable timers
-- Run `ingest.sh` manually once to verify end-to-end
+The database layer still uses "healthdash" names: Postgres container, volume, DB name, DB user, .env references. Renaming requires a coordinated migration (stop services, rename volume/DB, update all connection strings, restart). Low risk but high annoyance factor. Not urgent — it works fine as-is.
 
-### 3.2 Run backfills on server
+**Decision needed:** Is the naming confusion worth the migration effort? Probably not unless we're adding a second database or sharing the stack with someone.
 
-```bash
-# Add nsight score columns and backfill
-python materialize_scores.py --days 365
+### pandas SQLAlchemy warning
 
-# Generate first correlation insight
-python generate_correlation_insight.py --force
-```
+`run_correlations_for_display()` passes a raw psycopg2 connection to `pd.read_sql()`. Pandas wants a SQLAlchemy engine. Functional but noisy in logs. Fix is straightforward (create an engine from DATABASE_URL) but touches the correlation analysis hot path.
 
-### 3.3 Verify
+### Correlation insight schedule
 
-- [ ] Ingest pipeline runs successfully (all 3 sources)
-- [ ] Scores materialize correctly
-- [ ] Daily insight generates
-- [ ] All pages load with current data
-- [ ] Systemd timer fires on schedule (check with `systemctl --user list-timers`)
-
-### 3.4 Decommission healthdash frontend
-
-```bash
-# On docker-top:
-systemctl --user stop healthdash-web
-systemctl --user disable healthdash-web
-systemctl --user stop healthdash-ingest.timer
-systemctl --user disable healthdash-ingest.timer
-# ... same for all healthdash-insights-* timers
-```
-
-### 3.5 Update Caddy
-
-- Remove `healthdash.blakehoerres.com → :5200` route
-- Point domain to nsight's `:5100` (or add `nsight.blakehoerres.com`)
+Currently runs on Fridays only (matching Fri-Thu training week). The day-of-week check in `nsight-ingest` was changed from Monday → Friday in b991ba7. Verify this is actually the right cadence — with the regenerate button available, manual generation is always an option.
 
 ---
 
-## Phase 4: Cleanup
+## Backlog
 
-- Archive healthdash repo on GitHub (Settings → Archive)
-- Remove healthdash deploy workflow from GitHub Actions
-- Keep `docker-compose.yml` for Postgres (stays running regardless)
-- Delete healthdash systemd units from server
+### Session-type-aware correlations
 
----
+`scoring.py` now compares training volume against same-muscle-group sessions (upper vs upper, lower vs lower). The correlation analysis in `app.py` still uses raw `hevy_total_volume_lbs` which lumps all session types together. This means the HRV-vs-volume and deep-sleep-vs-volume correlations may be noisy.
 
-## Gotchas
+**Options to discuss:**
+- Add muscle-group-specific volume columns to daily_log (e.g. `hevy_upper_volume`, `hevy_lower_volume`)
+- Or compute session-type volume on the fly in `run_correlations_for_display()` using hevy_sets
+- Or just correlate against session RPE/intensity rather than raw volume
 
-1. **Garmin token cache** — `ingest_garmin.py` stores a session token at `GARMIN_TOKEN_PATH` (defaults to `~/.garmin_token`). This is a file path, not repo-relative. Should work unchanged.
+### Radial muscle group chart
 
-2. **Cronometer binary** — `cronometer-export` is a standalone binary at `~/.local/bin/cronometer-export`. Not repo-dependent, just needs to be on PATH.
+Hevy-style body map visualization showing muscle group distribution over a time window. Would go on the training page alongside or replacing the current muscle group bar chart.
 
-3. **generate_correlation_insight.py imports `from app import run_correlations_for_display`** — this currently works because it runs from nsight's directory. After moving to `nsight/`, ensure it still resolves correctly (it should, since `app.py` is in the same directory).
+**Needs discussion:**
+- What time window? Rolling 7 days? 28 days? Selectable?
+- SVG body outline vs radial/polar chart vs heatmap grid?
+- Data is already available (hevy_muscle_groups array in daily_log, granular data in hevy_sets)
+- Reference: Hevy's own body map for the interaction model
 
-4. **insights table CHECK constraint** — the live DB may still have the old constraint (`daily`, `weekly`, `monthly` only). `generate_correlation_insight.py` already handles this with an `ALTER TABLE` on first run, but verify it worked.
+### Unused insight types: sleep & recovery
 
-5. **`app.py` is 2300+ lines** — not a blocker for this migration, but worth noting for a future refactor into blueprints. Don't refactor during migration.
+The schema allows `sleep` and `recovery` insight types but nothing generates them. These could be specialized insights focused on sleep patterns or recovery trends, separate from the general daily/weekly insights.
 
-6. **`derived_daily` table** — healthdash's `correlations.py` populates ACWR and anomaly flags here. nsight doesn't read from this table directly (it computes ACWR inline in `app.py`). If you want the anomaly flags later, port `correlations.py` then. Not needed for MVP.
+**Decision needed:** Are these worth building, or do the daily/weekly insights already cover sleep and recovery well enough?
 
----
+### app.py decomposition
 
-## File moves summary
-
-```
-healthdash/                    →  nsight/
-├── ingest_garmin.py           →  ingest/ingest_garmin.py
-├── ingest_hevy.py             →  ingest/ingest_hevy.py
-├── cronometer/                →  ingest/cronometer/
-├── generate_insights.py       →  generate_insights.py
-├── athlete_context.txt        →  athlete_context.txt
-├── schema.sql                 →  schema.sql
-├── docker-compose.yml         →  docker-compose.yml
-├── .env                       →  .env (merge with existing)
-├── healthdash-ingest.sh       →  ingest.sh (rewritten)
-└── systemd/                   →  systemd/ (new units)
-
-NOT moved (no longer needed):
-├── app.py                     ✗  nsight has its own
-├── templates/                 ✗  nsight has its own
-├── static/                    ✗  nsight has its own
-├── correlations.py            ✗  logic already in nsight app.py
-├── kahunas_prep.py            ✗  legacy, ported to app.py
-├── debug_*.py                 ✗  scratch files
-└── Caddyfile                  ✗  update in-place on server
-```
+`app.py` is ~2,500 lines. Not a crisis, but it's doing a lot: all routes, all scoring display logic, correlation analysis, API endpoints. Flask blueprints would be the natural split (e.g. `routes/training.py`, `routes/api.py`, `routes/correlations.py`). Only worth doing when we're next making significant changes to the routing layer.
 
 ---
 
-## Time estimate
+## Ideas (not yet evaluated)
 
-Phases 1-2 are ~90 minutes of file moves, path fixes, and script writing. Phase 3 is ~30 minutes of server work. Phase 4 is 10 minutes of cleanup. Total: one focused afternoon session.
+These have come up in conversation but haven't been scoped or designed. Capturing them here so they don't get lost.
+
+- **Check-in flow improvements** — the checkin page was ported from healthdash; may need UX refinement for the nsight context
+- **Notification/alerting** — push notifications for anomalies (HRV crash, missed workout, etc.) via PWA
+- **Data export** — CSV/JSON export of daily_log for external analysis
+- **Multi-device Garmin support** — currently assumes single device; may need adjustment if watch changes
+
+---
+
+## Infrastructure notes
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Server | docker-top (sysadmin) | Tailscale + local SSH |
+| Web | nsight-web.service (gunicorn :5100) | 2 workers, restart=on-failure |
+| Ingest | nsight-ingest.timer | Daily 10:00 UTC |
+| Correlations | Friday only (in nsight-ingest) | + manual via regenerate button |
+| DB | PostgreSQL 16 (healthdash container) | localhost:5432 |
+| CI | GitHub Actions → git pull + pip install + restart | On push to main |
+| Linger | Enabled for sysadmin | Required for user services without SSH |
