@@ -38,7 +38,7 @@ Execute these steps in order. Stop and report if any step fails.
 
 ### Step 3: Post-deploy via SSH
 
-Wait ~15 seconds for CI to complete the git pull, then SSH to docker-top for post-deploy steps.
+CI completes in ~30 seconds (git pull + pip install + restart nsight-web). Rather than sleeping, **let CI handle code sync and restart**, then SSH only for what CI doesn't do.
 
 Use this SSH pattern for all commands:
 ```bash
@@ -47,34 +47,29 @@ ssh docker-top "cd /home/sysadmin/stacks/nsight && <command>"
 
 If `ssh docker-top` fails (not on local network), retry with `ssh docker-top-ts`.
 
-#### 3a: Verify code is current
+#### 3a: Wait for CI, then verify code is current
+Poll until the remote HEAD matches the pushed commit (CI typically finishes within 30s):
 ```bash
-ssh docker-top "cd /home/sysadmin/stacks/nsight && git log --oneline -1"
+EXPECTED=$(git rev-parse --short HEAD)
+for i in 1 2 3 4 5; do
+  REMOTE=$(ssh docker-top "cd /home/sysadmin/stacks/nsight && git rev-parse --short HEAD" 2>/dev/null)
+  [ "$REMOTE" = "$EXPECTED" ] && break
+  sleep 8
+done
 ```
-Confirm the commit hash matches what was just pushed.
+If it doesn't match after ~40 seconds, fall back to manual pull:
+```bash
+ssh docker-top "cd /home/sysadmin/stacks/nsight && git pull origin main"
+```
 
 #### 3b: Run DB migrations (if schema changed)
-Only run this if `schema.sql`, `generate_insights.py` (the inline CREATE TABLE / ALTER TABLE), or any migration-relevant code was modified:
-```bash
-ssh docker-top "cd /home/sysadmin/stacks/nsight && .venv/bin/python -c \"
-import psycopg2, os
-from dotenv import load_dotenv
-load_dotenv()
-conn = psycopg2.connect(os.environ['DATABASE_URL'])
-cur = conn.cursor()
-cur.execute('''ALTER TABLE insights DROP CONSTRAINT IF EXISTS insights_type_check''')
-cur.execute('''ALTER TABLE insights ADD CONSTRAINT insights_type_check CHECK (type IN (''daily'', ''weekly'', ''monthly'', ''correlation'', ''sleep'', ''recovery'', ''weekly_current'', ''monthly_current''))''')
-conn.commit()
-print('Migration OK')
-conn.close()
-\""
-```
+Only needed if `schema.sql` or `generate_insights.py` (inline CREATE TABLE / ALTER TABLE) changed.
 
-**Prefer this instead**: run the generate_insights.py script which includes the migration block in its startup:
+Preferred: run `generate_insights.py` which includes the migration block at startup:
 ```bash
 ssh docker-top "cd /home/sysadmin/stacks/nsight && .venv/bin/python generate_insights.py --rolling"
 ```
-This both migrates the schema AND generates rolling insights.
+This both migrates the schema AND generates rolling insights (combines 3b + 3c).
 
 #### 3c: Generate rolling insights (if insight code changed)
 If `generate_insights.py`, `athlete_context.txt`, or prompt-related code changed:
@@ -82,7 +77,8 @@ If `generate_insights.py`, `athlete_context.txt`, or prompt-related code changed
 ssh docker-top "cd /home/sysadmin/stacks/nsight && .venv/bin/python generate_insights.py --rolling"
 ```
 
-#### 3d: Restart web service (if CI didn't already, or to be safe)
+#### 3d: Restart web service
+CI already restarts nsight-web. Only do this manually if CI didn't run or you need a second restart after migrations:
 ```bash
 ssh docker-top "systemctl --user restart nsight-web"
 ```
