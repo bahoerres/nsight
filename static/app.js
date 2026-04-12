@@ -68,7 +68,8 @@
                 if (!status.running) {
                   clearInterval(pollId);
                   syncBtn.classList.remove('syncing');
-                  showToast('Sync complete', 'success');
+                  showToast('Sync complete — reloading...', 'success');
+                  setTimeout(function() { location.reload(); }, 1500);
                 }
               });
           }, 2000);

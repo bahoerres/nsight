@@ -30,6 +30,18 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# Cache-bust static assets: append ?v=<mtime> so browsers pick up changes
+@app.url_defaults
+def static_cache_bust(endpoint, values):
+    if endpoint == "static":
+        filename = values.get("filename")
+        if filename:
+            filepath = os.path.join(app.static_folder, filename)
+            try:
+                values["v"] = int(os.path.getmtime(filepath))
+            except OSError:
+                pass
+
 LOCAL_TZ = ZoneInfo(os.environ.get("TZ", "America/Chicago"))
 
 # ── Database ────────────────────────────────────────────────────────
