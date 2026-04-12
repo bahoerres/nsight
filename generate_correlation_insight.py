@@ -67,13 +67,13 @@ def build_correlation_prompt(results):
     if findings:
         lines.append("## Significant Correlations (FDR-corrected)")
         for f in findings:
-            lines.append(f"- {f['interpretation']} (r={f['r']:.3f}, p={f.get('p_corrected', f.get('p', 0)):.4f}, lag={f['lag']}d, n={f['n']})")
+            lines.append(f"- {f['interpretation']} (r={f['r']:.3f}, p={f['p_corrected']:.4f}, lag={f['lag_days']}d, n={f['n']})")
         lines.append("")
 
     if exploratory:
         lines.append("## Exploratory Findings (uncorrected p < 0.05)")
         for f in exploratory:
-            lines.append(f"- {f['interpretation']} (r={f['r']:.3f}, p={f.get('p', 0):.4f}, lag={f['lag']}d, n={f['n']})")
+            lines.append(f"- {f['interpretation']} (r={f['r']:.3f}, p={f['p_corrected']:.4f}, lag={f['lag_days']}d, n={f['n']})")
         lines.append("")
 
     if not findings and not exploratory:
@@ -119,19 +119,6 @@ def generate_correlation_insight(conn, target_date, force=False):
     except Exception as e:
         print(f"  API error: {e}")
         return False
-
-    # Ensure 'correlation' type is allowed
-    with conn.cursor() as cur:
-        cur.execute("""
-            DO $$
-            BEGIN
-                ALTER TABLE insights DROP CONSTRAINT IF EXISTS insights_type_check;
-                ALTER TABLE insights ADD CONSTRAINT insights_type_check
-                    CHECK (type IN ('daily', 'weekly', 'monthly', 'correlation', 'sleep', 'recovery'));
-            EXCEPTION WHEN others THEN NULL;
-            END $$;
-        """)
-    conn.commit()
 
     # Store
     with conn.cursor() as cur:
