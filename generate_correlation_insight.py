@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MODEL = "claude-sonnet-4-5-20241022"
+MODEL = "claude-sonnet-4-6"
 PROMPT_VERSION = "correlation-v1"
 MAX_TOKENS = 1024
 
