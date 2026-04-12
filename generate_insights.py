@@ -277,25 +277,34 @@ def _fetch_weekly_data_raw(conn, week_start: date, week_end: date) -> dict | Non
 
 
 def fetch_rolling_weekly_data(conn, as_of_date: date) -> dict | None:
-    """Rolling last-7-days window ending on as_of_date (no Fri-Thu snapping)."""
-    # Call the core weekly query directly with the raw date range.
-    # fetch_weekly_data snaps to Fri-Thu; we want a literal last-7-days window.
-    return _fetch_weekly_data_raw(conn, week_start=as_of_date - timedelta(days=6), week_end=as_of_date)
+    """Current training week so far (Fri-Thu), ending on as_of_date."""
+    # Snap to the most recent Friday (start of training week).
+    # weekday(): Mon=0 … Sun=6; Friday=4
+    days_since_fri = (as_of_date.weekday() - 4) % 7
+    week_start = as_of_date - timedelta(days=days_since_fri)
+    return _fetch_weekly_data_raw(conn, week_start=week_start, week_end=as_of_date)
 
 
 def fetch_rolling_monthly_data(conn, as_of_date: date) -> dict | None:
-    """Rolling last-30-days window ending on as_of_date."""
-    return fetch_monthly_data(conn, as_of_date)
+    """Current calendar month so far, from the 1st through as_of_date."""
+    month_start = as_of_date.replace(day=1)
+    # Reuse _fetch_monthly_data_raw with the partial month window
+    return _fetch_monthly_data_raw(conn, month_start=month_start, month_end=as_of_date)
 
 
 def fetch_monthly_data(conn, month_end: date) -> dict | None:
     month_start = month_end - timedelta(days=29)
+    return _fetch_monthly_data_raw(conn, month_start, month_end)
+
+
+def _fetch_monthly_data_raw(conn, month_start: date, month_end: date) -> dict | None:
+    """Core monthly data fetch for an arbitrary date window."""
     prior_end = month_start - timedelta(days=1)
-    prior_start = prior_end - timedelta(days=29)
+    prior_start = prior_end - timedelta(days=(month_end - month_start).days)
 
     cur = conn.cursor()
 
-    # Current 30 days
+    # Current window
     cur.execute(
         """SELECT
                ROUND(AVG(hrv_nightly_avg)::numeric, 1) as hrv_avg,
@@ -319,7 +328,7 @@ def fetch_monthly_data(conn, month_end: date) -> dict | None:
     if not current:
         return None
 
-    # Prior 30 days
+    # Prior window (same length)
     cur.execute(
         """SELECT
                ROUND(AVG(hrv_nightly_avg)::numeric, 1) as hrv_avg,
@@ -844,40 +853,39 @@ Do not include a title or heading — the UI already provides one. Write plain p
 
 
 def build_rolling_weekly_prompt(data: dict) -> str:
-    """Like build_weekly_prompt but framed as a rolling 7-day snapshot, not a completed week."""
+    """Like build_weekly_prompt but framed as the current training week so far."""
     base = build_weekly_prompt(data)
-    # Replace the fixed-week framing with rolling-window framing
     base = base.replace(
         f"Here is his health summary for the week of {data['week_start']} to {data['week_end']}:",
-        f"Here is a rolling 7-day snapshot as of {data['week_end']} (covering {data['week_start']} through {data['week_end']}). "
-        "This is NOT a completed training week — it's a live window into the last 7 days.",
+        f"Here is his training week so far ({data['week_start']} through {data['week_end']}). "
+        "This week is still in progress — frame your analysis as a mid-week check-in.",
     )
     base = base.replace(
         "Write a 3-4 sentence weekly summary. Lead with the most important training story",
-        "Write a 3-4 sentence snapshot of where things stand right now. Lead with the most important training story",
+        "Write a 3-4 sentence check-in on how this week is going so far. Lead with the most important training story",
     )
     base = base.replace(
         "Be specific and actionable.",
-        "Frame as current status, not a retrospective. Be specific and actionable.",
+        "Frame as current status — what's going well, what to watch, what to adjust for the rest of the week. Be specific and actionable.",
     )
     return base
 
 
 def build_rolling_monthly_prompt(data: dict) -> str:
-    """Like build_monthly_prompt but framed as a rolling 30-day snapshot."""
+    """Like build_monthly_prompt but framed as the current calendar month so far."""
     base = build_monthly_prompt(data)
     base = base.replace(
         f"Here is his 30-day health report ({data['month_start']} to {data['month_end']}):",
-        f"Here is a rolling 30-day snapshot as of {data['month_end']} (covering {data['month_start']} through {data['month_end']}). "
-        "This is NOT a completed calendar month — it's a live window into the last 30 days.",
+        f"Here is his month so far ({data['month_start']} through {data['month_end']}). "
+        "This month is still in progress — frame your analysis as a mid-month check-in.",
     )
     base = base.replace(
         "Write a 5-6 sentence monthly analysis. Lead with the strength story",
-        "Write a 5-6 sentence snapshot of where things stand over the last 30 days. Lead with the strength story",
+        "Write a 5-6 sentence check-in on how this month is shaping up. Lead with the strength story",
     )
     base = base.replace(
         "Be analytical, not cheerleader-y.",
-        "Frame as current status, not a retrospective. Be analytical, not cheerleader-y.",
+        "Frame as current status — trajectory, what to keep doing, what to recalibrate. Be analytical, not cheerleader-y.",
     )
     return base
 
