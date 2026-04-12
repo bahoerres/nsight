@@ -452,6 +452,14 @@
   <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
     <span style="font-size: 1.1rem; font-weight: 600; color: var(--text);">What This Means</span>
     <span style="font-size: 0.75rem; color: var(--text-muted);">updated {{ correlation_insight.date }}</span>
+    <button class="insights-regen-btn" id="corr-regen" aria-label="Regenerate correlation insight" title="Regenerate correlation insight">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/>
+        <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>
+      </svg>
+    </button>
   </div>
   <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-left: 4px solid var(--green); border-radius: var(--radius-card); padding: 20px;">
     <p style="color: var(--text-secondary); line-height: 1.65; margin: 0;">{{ correlation_insight.content }}</p>
@@ -615,5 +623,46 @@
     );
     fills.forEach((el) => observer.observe(el));
   })();
+</script>
+<script>
+(function () {
+  var regenBtn = document.getElementById('corr-regen');
+  if (!regenBtn) return;
+  regenBtn.addEventListener('click', function () {
+    if (regenBtn.classList.contains('regenerating')) return;
+    regenBtn.classList.add('regenerating');
+
+    fetch('/api/generate-insight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'correlation' }),
+    })
+      .then(function (res) {
+        if (res.status === 409) {
+          regenBtn.classList.remove('regenerating');
+          return res.json().then(function (data) {
+            var msg = data.error === 'already_running'
+              ? 'Insight generation already running'
+              : 'Please wait — last generation was less than 5 minutes ago';
+            showToast(msg, 'info');
+          });
+        }
+        var pollId = setInterval(function () {
+          fetch('/api/insight/correlation')
+            .then(function (r) { return r.json(); })
+            .then(function () {
+              clearInterval(pollId);
+              regenBtn.classList.remove('regenerating');
+              showToast('Correlation insight regenerated — reloading...', 'success');
+              setTimeout(function () { location.reload(); }, 1500);
+            });
+        }, 3000);
+      })
+      .catch(function () {
+        regenBtn.classList.remove('regenerating');
+        showToast('Failed to regenerate insight', 'error');
+      });
+  });
+})();
 </script>
 {% endblock %}
