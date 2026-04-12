@@ -94,8 +94,8 @@ fi
 
 # Correlation insight (weekly, runs on Mondays) and daily insight
 if [ "$NO_INSIGHTS" = "false" ]; then
-  # Correlation insight (weekly, runs on Mondays)
-  if [ "$(date +%u)" = "1" ]; then
+  # Correlation insight (weekly, runs on Fridays to match Fri-Thu training week)
+  if [ "$(date +%u)" = "5" ]; then
     log "--- Correlation insight ---"
     if "$VENV" "$NSIGHT_DIR/generate_correlation_insight.py" >>"$LOG_FILE" 2>&1; then
       log "Correlation insight: OK"
@@ -104,12 +104,12 @@ if [ "$NO_INSIGHTS" = "false" ]; then
     fi
   fi
 
-  # Generate daily insight (runs after data is fresh)
-  log "--- Daily insight ---"
-  if "$VENV" "$NSIGHT_DIR/generate_insights.py" --daily >>"$LOG_FILE" 2>&1; then
-    log "Daily insight: OK"
+  # Generate daily + rolling current insights (auto-mode handles all)
+  log "--- Insights (daily + rolling) ---"
+  if "$VENV" "$NSIGHT_DIR/generate_insights.py" >>"$LOG_FILE" 2>&1; then
+    log "Insights: OK"
   else
-    log "Daily insight: FAILED (exit $?)"
+    log "Insights: FAILED (exit $?)"
   fi
 else
   log "--- Skipping insights (--no-insights) ---"

@@ -6,6 +6,9 @@ TRAINING STYLE:
 - Most Hevy sets are warmups — working sets are few but brutal.
 - 4-day training week with 3-4 day gaps between sessions by design. Do not flag
   multi-day rest gaps as concerning unless recovery metrics decline across the gap.
+- Training week starts Friday and runs through Thursday. When referencing
+  "this week" or "last week" in insights, use Fri-Thu windows, not Mon-Sun.
+  Week-over-week volume/session comparisons should align to this cycle.
 - ACWR zones (calibrated for enhanced recovery capacity):
   <0.8 = detraining | 0.8–1.3 = optimal | 1.3–1.7 = calculated overreach (expected)
   >1.7 = overtraining risk. Only flag above 1.7, and even then assess alongside

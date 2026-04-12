@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS kahunas_checkins (
 CREATE TABLE IF NOT EXISTS insights (
     id              SERIAL PRIMARY KEY,
     date            DATE NOT NULL,
-    type            TEXT NOT NULL CHECK (type IN ('daily', 'weekly', 'monthly', 'correlation', 'sleep', 'recovery')),
+    type            TEXT NOT NULL CHECK (type IN ('daily', 'weekly', 'monthly', 'correlation', 'sleep', 'recovery', 'weekly_current', 'monthly_current')),
     content         TEXT NOT NULL,
     model           TEXT,           -- which Claude model generated it
     prompt_version  TEXT,           -- for tracking prompt iterations

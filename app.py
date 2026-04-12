@@ -2102,8 +2102,25 @@ def insights_page():
         (tab,),
     )
     items = cur.fetchall()
+
+    # Fetch rolling "current" insight for weekly/monthly tabs
+    current_insight = None
+    if tab in ("weekly", "monthly"):
+        current_type = f"{tab}_current"
+        cur.execute(
+            "SELECT date, type, content FROM insights WHERE type = %s ORDER BY date DESC LIMIT 1",
+            (current_type,),
+        )
+        current_insight = cur.fetchone()
+
     conn.close()
-    return render_template("insights.html", active_page="insights", tab=tab, items=items)
+    return render_template(
+        "insights.html",
+        active_page="insights",
+        tab=tab,
+        items=items,
+        current_insight=current_insight,
+    )
 
 
 # ── Correlations ─────────────────────────────────────────────────────
@@ -2429,7 +2446,7 @@ def api_ingest_status():
 def api_generate_insight():
     data = request.get_json(force=True)
     insight_type = data.get("type", "daily")
-    if insight_type not in ("daily", "weekly", "monthly"):
+    if insight_type not in ("daily", "weekly", "monthly", "weekly_current", "monthly_current"):
         return jsonify({"error": "invalid_type"}), 400
 
     running, cooldown = _check_lock(INSIGHT_LOCK)
@@ -2440,13 +2457,17 @@ def api_generate_insight():
 
     venv_python = os.path.join(NSIGHT_DIR, ".venv", "bin", "python")
     script = os.path.join(NSIGHT_DIR, "generate_insights.py")
-    _spawn_and_track([venv_python, script, f"--{insight_type}", "--force"], INSIGHT_LOCK)
+    # Rolling types use --rolling flag; standard types use --{type} --force
+    if insight_type in ("weekly_current", "monthly_current"):
+        _spawn_and_track([venv_python, script, "--rolling"], INSIGHT_LOCK)
+    else:
+        _spawn_and_track([venv_python, script, f"--{insight_type}", "--force"], INSIGHT_LOCK)
     return jsonify({"status": "started", "type": insight_type}), 202
 
 
 @app.route("/api/insight/<insight_type>")
 def api_insight(insight_type):
-    if insight_type not in ("daily", "weekly", "monthly"):
+    if insight_type not in ("daily", "weekly", "monthly", "weekly_current", "monthly_current"):
         return jsonify({"error": "invalid_type"}), 400
 
     conn = get_db()

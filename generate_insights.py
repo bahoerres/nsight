@@ -14,6 +14,7 @@ Usage:
     python generate_insights.py --backfill --since 2025-09-01
     python generate_insights.py --backfill --since 2025-09-01 --type daily
     python generate_insights.py --force      # regenerate even if already exists
+    python generate_insights.py --rolling    # generate rolling weekly_current + monthly_current
 """
 
 import argparse
@@ -33,8 +34,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MODEL = "claude-opus-4-6"
-PROMPT_VERSIONS = {"daily": "daily-v3", "weekly": "weekly-v3", "monthly": "monthly-v3"}
-MAX_TOKENS = {"daily": 640, "weekly": 1024, "monthly": 1280}
+PROMPT_VERSIONS = {
+    "daily": "daily-v3",
+    "weekly": "weekly-v3",
+    "monthly": "monthly-v3",
+    "weekly_current": "rolling-weekly-v1",
+    "monthly_current": "rolling-monthly-v1",
+}
+MAX_TOKENS = {"daily": 640, "weekly": 1024, "monthly": 1280, "weekly_current": 1024, "monthly_current": 1280}
 
 # Load athlete context from external file (editable without code changes)
 _CONTEXT_PATH = os.path.join(
@@ -169,7 +176,15 @@ def fetch_daily_data(conn, target_date: date) -> dict | None:
 
 
 def fetch_weekly_data(conn, week_end: date) -> dict | None:
-    week_start = week_end - timedelta(days=6)
+    # Training week is Fri-Thu. Anchor week_end to the most recent Thursday.
+    days_past_thu = (week_end.weekday() - 3) % 7
+    week_end = week_end - timedelta(days=days_past_thu)
+    week_start = week_end - timedelta(days=6)  # Friday
+    return _fetch_weekly_data_raw(conn, week_start, week_end)
+
+
+def _fetch_weekly_data_raw(conn, week_start: date, week_end: date) -> dict | None:
+    """Core weekly data fetch for an arbitrary 7-day window."""
     prior_end = week_start - timedelta(days=1)
     prior_start = prior_end - timedelta(days=6)
     baseline_start = week_end - timedelta(days=90)
@@ -259,6 +274,18 @@ def fetch_weekly_data(conn, week_end: date) -> dict | None:
         "muscles": muscles,
         "exercise_data": fetch_weekly_exercise_data(conn, week_start, week_end),
     }
+
+
+def fetch_rolling_weekly_data(conn, as_of_date: date) -> dict | None:
+    """Rolling last-7-days window ending on as_of_date (no Fri-Thu snapping)."""
+    # Call the core weekly query directly with the raw date range.
+    # fetch_weekly_data snaps to Fri-Thu; we want a literal last-7-days window.
+    return _fetch_weekly_data_raw(conn, week_start=as_of_date - timedelta(days=6), week_end=as_of_date)
+
+
+def fetch_rolling_monthly_data(conn, as_of_date: date) -> dict | None:
+    """Rolling last-30-days window ending on as_of_date."""
+    return fetch_monthly_data(conn, as_of_date)
 
 
 def fetch_monthly_data(conn, month_end: date) -> dict | None:
@@ -816,6 +843,45 @@ SIGNAL FILTERING RULES (follow strictly):
 Do not include a title or heading — the UI already provides one. Write plain prose only."""
 
 
+def build_rolling_weekly_prompt(data: dict) -> str:
+    """Like build_weekly_prompt but framed as a rolling 7-day snapshot, not a completed week."""
+    base = build_weekly_prompt(data)
+    # Replace the fixed-week framing with rolling-window framing
+    base = base.replace(
+        f"Here is his health summary for the week of {data['week_start']} to {data['week_end']}:",
+        f"Here is a rolling 7-day snapshot as of {data['week_end']} (covering {data['week_start']} through {data['week_end']}). "
+        "This is NOT a completed training week — it's a live window into the last 7 days.",
+    )
+    base = base.replace(
+        "Write a 3-4 sentence weekly summary. Lead with the most important training story",
+        "Write a 3-4 sentence snapshot of where things stand right now. Lead with the most important training story",
+    )
+    base = base.replace(
+        "Be specific and actionable.",
+        "Frame as current status, not a retrospective. Be specific and actionable.",
+    )
+    return base
+
+
+def build_rolling_monthly_prompt(data: dict) -> str:
+    """Like build_monthly_prompt but framed as a rolling 30-day snapshot."""
+    base = build_monthly_prompt(data)
+    base = base.replace(
+        f"Here is his 30-day health report ({data['month_start']} to {data['month_end']}):",
+        f"Here is a rolling 30-day snapshot as of {data['month_end']} (covering {data['month_start']} through {data['month_end']}). "
+        "This is NOT a completed calendar month — it's a live window into the last 30 days.",
+    )
+    base = base.replace(
+        "Write a 5-6 sentence monthly analysis. Lead with the strength story",
+        "Write a 5-6 sentence snapshot of where things stand over the last 30 days. Lead with the strength story",
+    )
+    base = base.replace(
+        "Be analytical, not cheerleader-y.",
+        "Frame as current status, not a retrospective. Be analytical, not cheerleader-y.",
+    )
+    return base
+
+
 def build_monthly_prompt(data: dict) -> str:
     c = data["current"]
     p = data["prior"]
@@ -964,6 +1030,20 @@ def generate_insight(
             return False
         prompt = build_monthly_prompt(data)
 
+    elif insight_type == "weekly_current":
+        data = fetch_rolling_weekly_data(conn, target_date)
+        if not data:
+            print(f"  No data for rolling week ending {target_date}, skipping.")
+            return False
+        prompt = build_rolling_weekly_prompt(data)
+
+    elif insight_type == "monthly_current":
+        data = fetch_rolling_monthly_data(conn, target_date)
+        if not data:
+            print(f"  No data for rolling month ending {target_date}, skipping.")
+            return False
+        prompt = build_rolling_monthly_prompt(data)
+
     else:
         print(f"  Unknown insight type: {insight_type}")
         return False
@@ -1023,9 +1103,9 @@ def backfill(conn, since: date, insight_type: str | None, delay: float, force: b
 
     if insight_type is None or insight_type == "weekly":
         print(f"Backfilling weekly insights from {since}...")
-        # Find first Sunday on or after since
+        # Find first Thursday on or after since (Fri-Thu training week ends Thursday)
         d = since
-        while d.weekday() != 6:  # Sunday
+        while d.weekday() != 3:  # Thursday
             d += timedelta(days=1)
         while d < today:
             generate_insight(conn, d, "weekly", force=force)
@@ -1084,6 +1164,11 @@ def main():
         default=1.0,
         help="Seconds between API calls during backfill (default 1.0)",
     )
+    parser.add_argument(
+        "--rolling",
+        action="store_true",
+        help="Generate rolling weekly_current and monthly_current insights",
+    )
     args = parser.parse_args()
 
     conn = get_db()
@@ -1095,13 +1180,19 @@ def main():
             CREATE TABLE IF NOT EXISTS insights (
                 id              SERIAL PRIMARY KEY,
                 date            DATE NOT NULL,
-                type            TEXT NOT NULL CHECK (type IN ('daily', 'weekly', 'monthly', 'correlation')),
+                type            TEXT NOT NULL CHECK (type IN ('daily', 'weekly', 'monthly', 'correlation', 'weekly_current', 'monthly_current')),
                 content         TEXT NOT NULL,
                 model           TEXT,
                 prompt_version  TEXT,
                 tokens_used     INT,
                 created_at      TIMESTAMPTZ DEFAULT now()
             )
+        """)
+        # Migrate: add rolling insight types to CHECK constraint
+        cur.execute("""
+            ALTER TABLE insights DROP CONSTRAINT IF EXISTS insights_type_check;
+            ALTER TABLE insights ADD CONSTRAINT insights_type_check
+                CHECK (type IN ('daily', 'weekly', 'monthly', 'correlation', 'sleep', 'recovery', 'weekly_current', 'monthly_current'));
         """)
         # Migrate: replace non-unique index with unique constraint
         # First, deduplicate any existing rows (keep the latest)
@@ -1126,21 +1217,29 @@ def main():
         today = local_today()
         target = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else today
 
-        explicit = args.daily or args.weekly or args.monthly
+        explicit = args.daily or args.weekly or args.monthly or args.rolling
+
+        if args.rolling:
+            # Manual rolling generation
+            generate_insight(conn, target, "weekly_current", force=True)
+            generate_insight(conn, target, "monthly_current", force=True)
 
         if not explicit:
             # Auto mode: generate whatever is due
             # Daily: target is today (report date); data is fetched for yesterday
             generate_insight(conn, target, "daily", force=args.force)
-            # Weekly on Mondays (for the week ending yesterday/Sunday)
-            if today.weekday() == 0:
+            # Weekly on Fridays (for the Fri-Thu week ending yesterday/Thursday)
+            if today.weekday() == 4:  # Friday
                 yesterday = today - timedelta(days=1)
                 generate_insight(conn, yesterday, "weekly", force=args.force)
             # Monthly on the 1st
             if today.day == 1:
                 last_month_end = today - timedelta(days=1)
                 generate_insight(conn, last_month_end, "monthly", force=args.force)
-        else:
+            # Rolling current insights — always regenerate nightly
+            generate_insight(conn, target, "weekly_current", force=True)
+            generate_insight(conn, target, "monthly_current", force=True)
+        elif not args.rolling:
             if args.daily:
                 generate_insight(conn, target, "daily", force=args.force)
             if args.weekly:

@@ -212,6 +212,32 @@
     margin: 1.2em 0;
   }
 
+  /* ── Current Insight Card ────────────────────────────────────── */
+  .insight-card.current {
+    border-left-width: 4px;
+    border-image: linear-gradient(180deg, var(--purple), var(--cyan)) 1;
+    border-image-slice: 1;
+    border-left-style: solid;
+    position: relative;
+  }
+
+  .insight-card.current .insight-card-header {
+    background: linear-gradient(135deg, rgba(211, 134, 155, 0.06), rgba(137, 180, 130, 0.06));
+  }
+
+  .current-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: linear-gradient(135deg, var(--purple), var(--cyan));
+    color: var(--bg-root);
+    flex-shrink: 0;
+  }
+
   /* ── Empty State ───────────────────────────────────────────────── */
   .insights-empty {
     display: flex;
@@ -354,8 +380,26 @@
 </div>
 
 {# ── Cards or Empty State ───────────────────────────────────────────── #}
-{% if items %}
+{% if current_insight or items %}
   <div class="insights-list">
+    {% if current_insight %}
+    <article class="insight-card current">
+      <div class="insight-card-header">
+        <span class="current-badge">Current</span>
+        <span class="insight-type-badge" style="background: rgba(211, 134, 155, 0.15); color: var(--purple);">
+          {% if tab == 'weekly' %}Rolling 7-Day{% else %}Rolling 30-Day{% endif %}
+        </span>
+        <time class="insight-date" datetime="{{ current_insight.date }}">
+          As of {{ current_insight.date.strftime('%B %-d, %Y') }}
+        </time>
+      </div>
+      <div class="insight-card-body">
+        <div class="insight-prose">
+          {{ current_insight.content | md }}
+        </div>
+      </div>
+    </article>
+    {% endif %}
     {% for item in items %}
     <article class="insight-card {{ item.type }}">
       <div class="insight-card-header">
@@ -377,7 +421,7 @@
     </article>
     {% endfor %}
   </div>
-{% else %}
+{% elif not current_insight %}
   <div class="insights-empty">
     <div class="insights-empty-icon">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
