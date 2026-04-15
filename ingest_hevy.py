@@ -96,6 +96,53 @@ def get_all_workouts(since: date = None) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Body Measurements API
+# ---------------------------------------------------------------------------
+
+
+def get_body_measurements_page(page: int, page_size: int = 10) -> dict:
+    r = requests.get(
+        f"{HEVY_BASE}/body_measurements",
+        headers=get_headers(),
+        params={"page": page, "pageSize": page_size},
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def get_all_body_measurements(since: date = None) -> list[dict]:
+    """Paginate through all body measurements, optionally filtering by date."""
+    measurements = []
+    page = 1
+    while True:
+        data = get_body_measurements_page(page)
+        batch = data.get("body_measurements", [])
+        if not batch:
+            break
+
+        for m in batch:
+            date_str = m.get("date", "")
+            if not date_str:
+                continue
+            m_date = datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+
+            if since and m_date < since:
+                log.info(f"Reached cutoff date {since}, stopping body measurement pagination")
+                return measurements
+
+            measurements.append({**m, "_date": m_date})
+
+        log.info(f"Body measurements page {page}: got {len(batch)} entries")
+
+        total = data.get("page_count", 1)
+        if page >= total:
+            break
+        page += 1
+
+    return measurements
+
+
+# ---------------------------------------------------------------------------
 # Weight conversion
 # ---------------------------------------------------------------------------
 
