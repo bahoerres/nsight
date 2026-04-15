@@ -316,6 +316,78 @@
     color: var(--yellow);
   }
 
+  /* ── Training Carousel ─────────────────────────────────────────── */
+  .carousel-header-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .training-carousel-slide {
+    display: none;
+  }
+
+  .training-carousel-slide.training-carousel-active {
+    display: block;
+  }
+
+  /* ── Body Measurements Grid ────────────────────────────────────── */
+  .measurements-grid {
+    padding: 20px 24px;
+  }
+
+  .measurement-current-weight {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .measurement-weight-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--yellow);
+  }
+
+  .measurement-weight-unit {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .measurement-weight-date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  .measurement-items {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  .measurement-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 0;
+  }
+
+  .measurement-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .measurement-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
   /* ── Responsive ────────────────────────────────────────────────── */
   @media (max-width: 900px) {
     .training-grid-2col {
@@ -339,6 +411,10 @@
 
     .pr-table .pr-exercise {
       max-width: 140px;
+    }
+
+    .measurement-items {
+      grid-template-columns: repeat(2, 1fr);
     }
   }
 </style>
