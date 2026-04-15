@@ -693,6 +693,17 @@ def main():
         since = today - timedelta(days=days)
         log.info(f"Fetching Hevy workouts since {since} ({days} days)")
 
+    # ── Body measurements ──────────────────────────────────────────
+    body_measurements = get_all_body_measurements(since=since)
+    log.info(f"Retrieved {len(body_measurements)} body measurements")
+
+    if body_measurements:
+        conn = get_db()
+        bm_count = upsert_body_measurements(conn, body_measurements)
+        log.info(f"Upserted {bm_count} body measurement rows")
+        conn.close()
+
+    # ── Workouts ───────────────────────────────────────────────────
     workouts = get_all_workouts(since=since)
     log.info(f"Retrieved {len(workouts)} workouts")
 
