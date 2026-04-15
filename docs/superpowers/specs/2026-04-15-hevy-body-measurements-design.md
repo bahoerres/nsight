@@ -172,6 +172,14 @@ latest_measurements = ...  # most recent row from body_measurements, converted t
 - **Bodyweight exercise substitution** — unchanged, still reads from `get_recent_bodyweight()`
 - **All other pages and scores** — no changes
 
+### Deployment & Migration
+
+The database (PostgreSQL `healthdash`) runs on `docker-top`, not locally. There is no local DB instance.
+
+- **Schema migration:** Add the `CREATE TABLE IF NOT EXISTS body_measurements` block to `schema.sql`. The table will be created on deploy via the existing migration path (SSH to docker-top, run schema or `generate_insights.py --rolling`).
+- **No data migration needed:** Existing `daily_log.body_weight_lbs` data from Garmin stays as-is. New weight data will come from Hevy going forward. No backfill required.
+- **Testing:** Code changes are verified on the remote after deploy. Use `/deploy` skill which handles commit, push, CI, SSH migration, and health check.
+
 ### Unit Conversions
 
 | Direction | Conversion |
