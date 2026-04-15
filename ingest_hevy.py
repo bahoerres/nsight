@@ -358,7 +358,7 @@ WEIGHTED_BODYWEIGHT_EXERCISES = {
 
 
 def get_recent_bodyweight(conn) -> float | None:
-    """Get most recent body_weight_lbs from daily_log (Garmin source)."""
+    """Get most recent body_weight_lbs from daily_log (bridged from Hevy body measurements)."""
     with conn.cursor() as cur:
         cur.execute(
             """
