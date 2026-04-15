@@ -468,38 +468,87 @@
   {% endif %}
 </section>
 
-{# ── Personal Records ────────────────────────────────────────────── #}
+{# ── Personal Records / Body Measurements Carousel ───────────────── #}
 <section>
   <div class="section-header mt-section">
-    <h3 class="section-title">Personal Records</h3>
+    <div class="carousel-header-row">
+      <button class="carousel-arrow training-carousel-prev" aria-label="Previous slide">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+      </button>
+      <h3 class="section-title" id="training-carousel-title">Personal Records</h3>
+      <button class="carousel-arrow training-carousel-next" aria-label="Next slide">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </button>
+    </div>
   </div>
-  <div class="card pr-table-card">
-    {% if personal_records %}
-    <table class="pr-table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Exercise</th>
-          <th>Weight</th>
-          <th>Reps</th>
-          <th>Date</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for pr in personal_records %}
-        <tr>
-          <td class="pr-rank {{ 'pr-rank-top' if loop.index <= 3 }}">{{ loop.index }}</td>
-          <td class="pr-exercise">{{ pr.exercise }}</td>
-          <td class="pr-weight">{{ "{:,.0f}".format(pr.weight) }} lbs</td>
-          <td class="pr-reps">{{ pr.reps }}</td>
-          <td class="pr-date">{{ pr.date }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p style="color: var(--text-muted);">No personal records found.</p>
-    {% endif %}
+
+  {# ── Slide 1: Personal Records ──────────────────────────────────── #}
+  <div class="training-carousel-slide training-carousel-active" data-title="Personal Records">
+    <div class="card pr-table-card">
+      {% if personal_records %}
+      <table class="pr-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Exercise</th>
+            <th>Weight</th>
+            <th>Reps</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pr in personal_records %}
+          <tr>
+            <td class="pr-rank {{ 'pr-rank-top' if loop.index <= 3 }}">{{ loop.index }}</td>
+            <td class="pr-exercise">{{ pr.exercise }}</td>
+            <td class="pr-weight">{{ "{:,.0f}".format(pr.weight) }} lbs</td>
+            <td class="pr-reps">{{ pr.reps }}</td>
+            <td class="pr-date">{{ pr.date }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color: var(--text-muted);">No personal records found.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Slide 2: Body Measurements ─────────────────────────────────── #}
+  <div class="training-carousel-slide" data-title="Body Measurements">
+    <div class="card">
+      {% if weight_data %}
+      <div class="chart-wrap" style="padding: 16px;">
+        <canvas id="weight-trend-chart"></canvas>
+      </div>
+      {% endif %}
+
+      {% if latest_measurements %}
+      <div class="measurements-grid">
+        {% if latest_measurements._weight_lbs %}
+        <div class="measurement-current-weight">
+          <span class="measurement-weight-value">{{ latest_measurements._weight_lbs }}</span>
+          <span class="measurement-weight-unit">lbs</span>
+          <span class="measurement-weight-date">as of {{ latest_measurements._date }}</span>
+        </div>
+        {% endif %}
+        <div class="measurement-items">
+          {% for label, val in latest_measurements.items() if not label.startswith('_') %}
+          <div class="measurement-item">
+            <span class="measurement-label">{{ label }}</span>
+            <span class="measurement-value">{{ val }}"</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% elif not weight_data %}
+      <p style="color: var(--text-muted); padding: 24px;">No body measurements found. Log measurements in Hevy to see trends here.</p>
+      {% endif %}
+    </div>
   </div>
 </section>
 
