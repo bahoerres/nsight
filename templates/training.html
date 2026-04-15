@@ -648,6 +648,60 @@ document.addEventListener('DOMContentLoaded', function() {
 
   createACWRChart('acwr-chart', acwrLabels, acwrData);
 
+  // ── Weight Trend Chart (90 days) ────────────────────────────────
+  var weightLabels = {{ weight_labels | tojson }};
+  var weightData   = {{ weight_data | tojson }};
+
+  if (weightLabels.length > 0) {
+    createLineChart('weight-trend-chart', weightLabels, [{
+      label: 'Weight (lbs)',
+      data: weightData,
+      borderColor: '#d3869b',
+      backgroundColor: 'rgba(211, 134, 155, 0.1)',
+      fill: true,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+      pointBackgroundColor: '#d3869b',
+    }], {
+      scales: {
+        x: { grid: { display: false } },
+        y: {
+          beginAtZero: false,
+          ticks: {
+            maxTicksLimit: 5,
+            callback: function(val) { return val + ' lbs'; }
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(item) { return item.raw + ' lbs'; }
+          }
+        }
+      }
+    });
+  }
+
+  // ── Training Carousel (PRs / Body Measurements) ─────────────────
+  var tSlides = document.querySelectorAll('.training-carousel-slide');
+  var tTitle  = document.getElementById('training-carousel-title');
+  var tCurrent = 0;
+
+  function showTrainingSlide(idx) {
+    tSlides.forEach(function(s) { s.classList.remove('training-carousel-active'); });
+    tCurrent = ((idx % tSlides.length) + tSlides.length) % tSlides.length;
+    tSlides[tCurrent].classList.add('training-carousel-active');
+    if (tTitle) {
+      tTitle.textContent = tSlides[tCurrent].dataset.title || '';
+    }
+  }
+
+  var tPrev = document.querySelector('.training-carousel-prev');
+  var tNext = document.querySelector('.training-carousel-next');
+  if (tPrev) tPrev.addEventListener('click', function() { showTrainingSlide(tCurrent - 1); });
+  if (tNext) tNext.addEventListener('click', function() { showTrainingSlide(tCurrent + 1); });
+
   // ── Volume by Muscle Group (stacked bar) ──────────────────────────
   var mgLabels   = {{ mg_labels | tojson }};
   var allMuscles = {{ all_muscles | tojson }};
