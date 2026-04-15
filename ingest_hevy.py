@@ -562,6 +562,108 @@ def upsert_sets(conn, rows: list[dict]):
     conn.commit()
 
 
+# Column mapping: normalize Hevy API field names to our DB column names.
+# Hevy uses inconsistent naming — some fields have _cm suffix, some don't.
+MEASUREMENT_FIELD_MAP = {
+    "weight_kg": "weight_kg",
+    "lean_mass_kg": "lean_mass_kg",
+    "fat_percent": "fat_percent",
+    "neck_cm": "neck_cm",
+    "shoulder_cm": "shoulder_cm",
+    "chest_cm": "chest_cm",
+    "left_bicep_cm": "left_bicep_cm",
+    "right_bicep_cm": "right_bicep_cm",
+    "left_forearm_cm": "left_forearm_cm",
+    "right_forearm_cm": "right_forearm_cm",
+    "abdomen": "abdomen_cm",
+    "abdomen_cm": "abdomen_cm",
+    "waist": "waist_cm",
+    "waist_cm": "waist_cm",
+    "hips": "hips_cm",
+    "hips_cm": "hips_cm",
+    "left_thigh": "left_thigh_cm",
+    "left_thigh_cm": "left_thigh_cm",
+    "right_thigh": "right_thigh_cm",
+    "right_thigh_cm": "right_thigh_cm",
+    "left_calf": "left_calf_cm",
+    "left_calf_cm": "left_calf_cm",
+    "right_calf": "right_calf_cm",
+    "right_calf_cm": "right_calf_cm",
+}
+
+DB_MEASUREMENT_COLS = [
+    "weight_kg", "lean_mass_kg", "fat_percent",
+    "neck_cm", "shoulder_cm", "chest_cm",
+    "left_bicep_cm", "right_bicep_cm",
+    "left_forearm_cm", "right_forearm_cm",
+    "abdomen_cm", "waist_cm", "hips_cm",
+    "left_thigh_cm", "right_thigh_cm",
+    "left_calf_cm", "right_calf_cm",
+]
+
+
+def upsert_body_measurements(conn, measurements: list[dict]) -> int:
+    """Upsert body measurements and bridge weight to daily_log."""
+    if not measurements:
+        return 0
+
+    count = 0
+    for m in measurements:
+        m_date = m["_date"]
+
+        # Map API fields to DB columns
+        values = {}
+        for api_field, db_col in MEASUREMENT_FIELD_MAP.items():
+            val = m.get(api_field)
+            if val is not None and db_col not in values:
+                values[db_col] = float(val)
+
+        if not values:
+            continue
+
+        # Build dynamic upsert
+        cols = list(values.keys())
+        placeholders = ", ".join([f"%({c})s" for c in cols])
+        col_list = ", ".join(cols)
+        update_set = ", ".join([f"{c} = EXCLUDED.{c}" for c in cols])
+
+        params = {"date": m_date}
+        params.update(values)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO body_measurements (date, {col_list})
+                VALUES (%(date)s, {placeholders})
+                ON CONFLICT (date) DO UPDATE SET
+                    {update_set},
+                    updated_at = now()
+                """,
+                params,
+            )
+
+        # Bridge weight to daily_log
+        weight_kg = values.get("weight_kg")
+        if weight_kg:
+            weight_lbs = round(weight_kg * 2.20462, 1)
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO daily_log (date, body_weight_lbs)
+                    VALUES (%s, %s)
+                    ON CONFLICT (date) DO UPDATE SET
+                        body_weight_lbs = EXCLUDED.body_weight_lbs,
+                        updated_at = now()
+                    """,
+                    (m_date, weight_lbs),
+                )
+
+        count += 1
+
+    conn.commit()
+    return count
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
