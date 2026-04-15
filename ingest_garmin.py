@@ -207,8 +207,10 @@ def fetch_day(client, day: date) -> dict:
     time.sleep(0.5)
     row.update(extract_hr(client, day))
     time.sleep(0.5)
-    row.update(extract_weight(client, day))
-    time.sleep(0.5)
+    # Bodyweight now sourced from Hevy body measurements.
+    # Uncomment if using a Garmin scale in the future.
+    # row.update(extract_weight(client, day))
+    # time.sleep(0.5)
 
     return row
 
