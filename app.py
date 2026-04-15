@@ -1058,6 +1058,60 @@ def training():
                 "date": r["date"].strftime("%b %-d, %Y"),
             })
 
+        # ── Body measurements (90-day weight trend + latest snapshot) ──
+        weight_labels = []
+        weight_data = []
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT date, weight_kg
+                FROM body_measurements
+                WHERE weight_kg IS NOT NULL
+                  AND date >= %s
+                ORDER BY date ASC
+            """, (today - timedelta(days=89),))
+            wt_rows = cur.fetchall()
+
+        for r in wt_rows:
+            weight_labels.append(r["date"].strftime("%-m/%-d"))
+            weight_data.append(round(float(r["weight_kg"]) * 2.20462, 1))
+
+        # Latest measurements snapshot (most recent row with any data)
+        latest_measurements = {}
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT * FROM body_measurements
+                ORDER BY date DESC LIMIT 1
+            """)
+            row = cur.fetchone()
+
+        if row:
+            cm_to_in = 0.393701
+            measurement_fields = [
+                ("neck_cm", "Neck"),
+                ("shoulder_cm", "Shoulders"),
+                ("chest_cm", "Chest"),
+                ("left_bicep_cm", "L Bicep"),
+                ("right_bicep_cm", "R Bicep"),
+                ("left_forearm_cm", "L Forearm"),
+                ("right_forearm_cm", "R Forearm"),
+                ("abdomen_cm", "Abdomen"),
+                ("waist_cm", "Waist"),
+                ("hips_cm", "Hips"),
+                ("left_thigh_cm", "L Thigh"),
+                ("right_thigh_cm", "R Thigh"),
+                ("left_calf_cm", "L Calf"),
+                ("right_calf_cm", "R Calf"),
+            ]
+            for col, label in measurement_fields:
+                val = row.get(col)
+                if val is not None:
+                    latest_measurements[label] = round(float(val) * cm_to_in, 1)
+
+            # Include weight in lbs and the snapshot date
+            if row.get("weight_kg"):
+                latest_measurements["_weight_lbs"] = round(float(row["weight_kg"]) * 2.20462, 1)
+            latest_measurements["_date"] = row["date"].strftime("%b %-d, %Y")
+
     finally:
         conn.close()
 
@@ -1086,6 +1140,9 @@ def training():
         mg_datasets=mg_datasets,
         mg_colors=mg_colors,
         personal_records=personal_records,
+        weight_labels=weight_labels,
+        weight_data=weight_data,
+        latest_measurements=latest_measurements,
     )
 
 
