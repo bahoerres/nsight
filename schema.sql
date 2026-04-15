@@ -165,3 +165,35 @@ CREATE INDEX IF NOT EXISTS idx_insights_date_type ON insights(date, type);
 CREATE INDEX IF NOT EXISTS idx_daily_log_date ON daily_log(date);
 CREATE INDEX IF NOT EXISTS idx_hevy_sets_date ON hevy_sets(date);
 CREATE INDEX IF NOT EXISTS idx_hevy_sets_exercise ON hevy_sets(exercise_name);
+
+-- hevy: body measurements (composition + circumference)
+CREATE TABLE IF NOT EXISTS body_measurements (
+    date            DATE PRIMARY KEY,
+
+    -- composition
+    weight_kg       NUMERIC(5,2),
+    lean_mass_kg    NUMERIC(5,2),
+    fat_percent     NUMERIC(4,1),
+
+    -- circumference (all in cm, matching Hevy API)
+    neck_cm         NUMERIC(5,1),
+    shoulder_cm     NUMERIC(5,1),
+    chest_cm        NUMERIC(5,1),
+    left_bicep_cm   NUMERIC(5,1),
+    right_bicep_cm  NUMERIC(5,1),
+    left_forearm_cm NUMERIC(5,1),
+    right_forearm_cm NUMERIC(5,1),
+    abdomen_cm      NUMERIC(5,1),
+    waist_cm        NUMERIC(5,1),
+    hips_cm         NUMERIC(5,1),
+    left_thigh_cm   NUMERIC(5,1),
+    right_thigh_cm  NUMERIC(5,1),
+    left_calf_cm    NUMERIC(5,1),
+    right_calf_cm   NUMERIC(5,1),
+
+    -- metadata
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_body_measurements_date ON body_measurements(date);
