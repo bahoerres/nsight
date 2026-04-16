@@ -493,6 +493,34 @@ def process_workouts(
 # ---------------------------------------------------------------------------
 
 
+def clear_hevy_window(conn, since: date, until: date):
+    """Clear all Hevy-sourced data in the sync window before reimporting.
+
+    This prevents duplicates when a workout's date is corrected in Hevy —
+    the old date's data gets wiped along with everything else, and only
+    what the API currently returns gets reinserted.
+    """
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM hevy_sets WHERE date BETWEEN %s AND %s", (since, until))
+        cur.execute(
+            """
+            UPDATE daily_log SET
+                hevy_session_count        = NULL,
+                hevy_total_volume_lbs     = NULL,
+                hevy_total_sets           = NULL,
+                hevy_session_duration_min = NULL,
+                hevy_muscle_groups        = NULL,
+                updated_at                = now()
+            WHERE date BETWEEN %s AND %s
+              AND (hevy_session_count IS NOT NULL
+                   OR hevy_total_volume_lbs IS NOT NULL)
+            """,
+            (since, until),
+        )
+    conn.commit()
+    log.info(f"Cleared Hevy data for {since} → {until}")
+
+
 def upsert_daily_hevy(conn, rows: list[dict]):
     if not rows:
         return
@@ -707,11 +735,17 @@ def main():
     workouts = get_all_workouts(since=since)
     log.info(f"Retrieved {len(workouts)} workouts")
 
-    if not workouts:
-        log.info("No workouts found in range")
-        return
-
     conn = get_db()
+
+    # Clear the entire sync window first so date-corrected workouts
+    # don't leave orphaned data on the old (wrong) date.
+    clear_since = since or (min(w["_date"] for w in workouts) if workouts else today)
+    clear_hevy_window(conn, clear_since, today)
+
+    if not workouts:
+        log.info("No workouts found in range (window cleared)")
+        conn.close()
+        return
 
     athlete_bw = get_recent_bodyweight(conn)
     if athlete_bw:
