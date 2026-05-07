@@ -2528,12 +2528,13 @@ def api_generate_insight():
     if insight_type == "correlation":
         script = os.path.join(NSIGHT_DIR, "generate_correlation_insight.py")
         _spawn_and_track([venv_python, script, "--force"], INSIGHT_LOCK)
-    elif insight_type in ("weekly_current", "monthly_current"):
-        script = os.path.join(NSIGHT_DIR, "generate_insights.py")
-        _spawn_and_track([venv_python, script, "--rolling"], INSIGHT_LOCK)
     else:
+        # daily, weekly, monthly, weekly_current, monthly_current all map to
+        # the unified "current view" refresh — single subprocess, single lock.
+        # Historical weekly/monthly archive entries stay frozen on their natural
+        # cadence (Fridays / 1st of month) via the nightly auto block.
         script = os.path.join(NSIGHT_DIR, "generate_insights.py")
-        _spawn_and_track([venv_python, script, f"--{insight_type}", "--force"], INSIGHT_LOCK)
+        _spawn_and_track([venv_python, script, "--refresh-current"], INSIGHT_LOCK)
     return jsonify({"status": "started", "type": insight_type}), 202
 
 

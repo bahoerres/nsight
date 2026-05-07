@@ -1177,6 +1177,11 @@ def main():
         action="store_true",
         help="Generate rolling weekly_current and monthly_current insights",
     )
+    parser.add_argument(
+        "--refresh-current",
+        action="store_true",
+        help="Regenerate today's daily + rolling weekly_current + monthly_current",
+    )
     args = parser.parse_args()
 
     conn = get_db()
@@ -1225,10 +1230,16 @@ def main():
         today = local_today()
         target = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else today
 
-        explicit = args.daily or args.weekly or args.monthly or args.rolling
+        explicit = args.daily or args.weekly or args.monthly or args.rolling or args.refresh_current
 
         if args.rolling:
             # Manual rolling generation
+            generate_insight(conn, target, "weekly_current", force=True)
+            generate_insight(conn, target, "monthly_current", force=True)
+
+        if args.refresh_current:
+            # Unified "bring me current" — latest daily + rolling weekly/monthly
+            generate_insight(conn, target, "daily", force=True)
             generate_insight(conn, target, "weekly_current", force=True)
             generate_insight(conn, target, "monthly_current", force=True)
 
@@ -1247,7 +1258,7 @@ def main():
             # Rolling current insights — always regenerate nightly
             generate_insight(conn, target, "weekly_current", force=True)
             generate_insight(conn, target, "monthly_current", force=True)
-        elif not args.rolling:
+        elif not args.rolling and not args.refresh_current:
             if args.daily:
                 generate_insight(conn, target, "daily", force=args.force)
             if args.weekly:
