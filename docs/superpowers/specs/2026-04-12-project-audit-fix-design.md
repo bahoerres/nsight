@@ -1,3 +1,7 @@
+---
+created: 2026-04-12T14:46
+updated: 2026-05-29T05:05
+---
 # Project Audit Fix — Design Spec
 
 **Date:** 2026-04-12

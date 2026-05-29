@@ -1,3 +1,7 @@
+---
+created: 2026-04-15T08:10
+updated: 2026-05-29T05:05
+---
 # Hevy Body Measurements Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

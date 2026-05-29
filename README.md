@@ -1,3 +1,7 @@
+---
+created: 2026-03-25T18:40
+updated: 2026-05-29T05:05
+---
 # nsight
 
 Personal health intelligence dashboard — same data as [healthdash](https://github.com/bahoerres/healthdash), better storytelling.

@@ -1,3 +1,7 @@
+---
+created: 2026-04-08T18:28
+updated: 2026-05-29T05:05
+---
 # Sync Button + Insight Carousel Design
 
 ## Overview

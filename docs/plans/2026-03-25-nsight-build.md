@@ -1,3 +1,7 @@
+---
+created: 2026-03-25T13:07
+updated: 2026-05-29T05:05
+---
 # nsight Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

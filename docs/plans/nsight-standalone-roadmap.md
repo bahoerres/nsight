@@ -1,3 +1,7 @@
+---
+created: 2026-04-12T16:41
+updated: 2026-05-29T05:05
+---
 # nsight roadmap
 
 **Last updated:** 2026-04-12
