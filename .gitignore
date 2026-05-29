@@ -6,3 +6,6 @@ __pycache__/
 dist/
 build/
 cronometer/servings.csv
+
+# Generated reports — daily output from scripts/lift_progression_report.py
+reports/
