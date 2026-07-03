@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# nsight-garmin-catchup
+# Morning catch-up for the Garmin timing gap: the nightly ingest fires before
+# the watch has synced last night's sleep to Garmin Connect, so today's row
+# lands with NULL sleep/recovery and nothing re-asks Garmin until tomorrow.
+# This runs every 30 min through the morning (systemd timer): exits fast once
+# today's sleep data exists, otherwise re-pulls Garmin, and on the run where
+# sleep finally lands it recomputes scores + insights once.
+
+set -euo pipefail
+
+NSIGHT_DIR="${NSIGHT_DIR:-$HOME/stacks/nsight}"
+VENV="$NSIGHT_DIR/.venv/bin/python"
+LOG_DIR="${LOG_DIR:-$HOME/.local/log/nsight}"
+LOG_FILE="$LOG_DIR/garmin-catchup-$(date +%Y-%m-%d).log"
+LOCK_FILE="$LOG_DIR/garmin-catchup.lock"
+
+mkdir -p "$LOG_DIR"
+
+# Load .env for credentials — never put passwords on the command line
+if [ -f "$NSIGHT_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$NSIGHT_DIR/.env"
+  set +a
+fi
+
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+# Never overlap with a previous catch-up still running
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  log "another catch-up run is in progress — skipping"
+  exit 0
+fi
+
+# True (exit 0) when today's row already has sleep data
+have_sleep() {
+  "$VENV" - <<'PY'
+import os, sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import psycopg2
+
+today = datetime.now(ZoneInfo(os.environ.get("TZ", "America/Chicago"))).date()
+conn = psycopg2.connect(os.environ["DATABASE_URL"])
+with conn, conn.cursor() as cur:
+    cur.execute("SELECT sleep_total_sec FROM daily_log WHERE date = %s", (today,))
+    row = cur.fetchone()
+sys.exit(0 if row and row[0] is not None else 1)
+PY
+}
+
+if have_sleep; then
+  log "sleep data already present for today — nothing to do"
+  exit 0
+fi
+
+log "no sleep data for today yet — pulling Garmin"
+if ! "$VENV" "$NSIGHT_DIR/ingest_garmin.py" --days 1 >>"$LOG_FILE" 2>&1; then
+  log "Garmin pull FAILED (exit $?) — will retry on next tick"
+  exit 0
+fi
+
+if ! have_sleep; then
+  log "Garmin has no sleep data for today yet (watch not synced?) — will retry on next tick"
+  exit 0
+fi
+
+log "sleep data landed — recomputing scores + insights"
+if "$VENV" "$NSIGHT_DIR/materialize_scores.py" --days 2 >>"$LOG_FILE" 2>&1; then
+  log "nsight scores: OK"
+else
+  log "nsight scores: FAILED (exit $?)"
+fi
+if "$VENV" "$NSIGHT_DIR/generate_insights.py" >>"$LOG_FILE" 2>&1; then
+  log "Insights: OK"
+else
+  log "Insights: FAILED (exit $?)"
+fi
+
+log "=== catch-up complete ==="

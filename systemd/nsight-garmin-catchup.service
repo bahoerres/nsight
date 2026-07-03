@@ -1,0 +1,9 @@
+[Unit]
+Description=nsight Garmin morning catch-up
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/stacks/nsight
+ExecStart=%h/stacks/nsight/nsight-garmin-catchup
+EnvironmentFile=%h/stacks/nsight/.env

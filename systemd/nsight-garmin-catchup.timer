@@ -1,0 +1,13 @@
+[Unit]
+Description=nsight Garmin morning catch-up timer
+
+[Timer]
+# Every 30 min, 05:30-10:30 Central: after the nightly ingest, through the
+# window where the watch usually syncs sleep to Garmin Connect. The service
+# exits fast once data is in, so late ticks are one SELECT and done.
+OnCalendar=*-*-* 05..10:30:00 America/Chicago
+OnCalendar=*-*-* 06..10:00:00 America/Chicago
+# No Persistent catch-up: this IS the catch-up; a missed tick just waits.
+
+[Install]
+WantedBy=timers.target
