@@ -22,8 +22,12 @@ jobs:
           username: sysadmin
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             cd /home/sysadmin/stacks/nsight
             git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/bahoerres/nsight.git
-            git pull origin main
+            git fetch origin main
+            git merge --ff-only origin/main
             .venv/bin/pip install --quiet -r requirements.txt 2>/dev/null || true
             systemctl --user restart nsight-web
+            sleep 3
+            curl -fsS -o /dev/null http://127.0.0.1:5100/
