@@ -78,7 +78,6 @@ def main():
     # bucket the exercises
     mapped: list[str] = []
     unknown: list[str] = []
-    bw_candidates: list[str] = []  # in MUSCLE_MAP but maybe should be in BODYWEIGHT set
 
     for title in sorted(exercise_to_routines):
         if title in MUSCLE_MAP:

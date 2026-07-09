@@ -171,25 +171,6 @@ def extract_hr(client, day: date) -> dict:
     return out
 
 
-def extract_weight(client, day: date) -> dict:
-    out = {}
-    try:
-        data = client.get_body_composition(day.isoformat())
-        # Body composition returns a list of weigh-ins for the date range
-        weighins = safe_get(data, "dateWeightList", default=[])
-        if weighins:
-            # Get the most recent weigh-in for this day
-            # Weight comes in grams from Garmin
-            for w in weighins:
-                weight_g = safe_get(w, "weight")
-                if weight_g:
-                    out["body_weight_lbs"] = round(float(weight_g) / 453.592, 1)
-                    break
-    except Exception as e:
-        log.warning(f"Weight fetch failed for {day}: {e}")
-    return out
-
-
 # ---------------------------------------------------------------------------
 # Main fetch loop
 # ---------------------------------------------------------------------------
@@ -207,10 +188,7 @@ def fetch_day(client, day: date) -> dict:
     time.sleep(0.5)
     row.update(extract_hr(client, day))
     time.sleep(0.5)
-    # Bodyweight now sourced from Hevy body measurements.
-    # Uncomment if using a Garmin scale in the future.
-    # row.update(extract_weight(client, day))
-    # time.sleep(0.5)
+    # Bodyweight is sourced from Hevy body measurements, not Garmin.
 
     return row
 

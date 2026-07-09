@@ -416,12 +416,6 @@ h4 { font-size: 1rem; }
 }
 
 /* ── Cards ──────────────────────────────────────────────────────── */
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
-}
-
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -601,9 +595,6 @@ h4 { font-size: 1rem; }
 .mt-section { margin-top: var(--section-gap); }
 .flex { display: flex; }
 .flex-wrap { flex-wrap: wrap; }
-.gap-sm { gap: 12px; }
-.gap-md { gap: 20px; }
-.gap-lg { gap: 32px; }
 
 /* ── Responsive ─────────────────────────────────────────────────── */
 
@@ -705,28 +696,6 @@ h4 { font-size: 1rem; }
   .donut-container {
     flex-direction: column;
     gap: 16px;
-  }
-}
-
-@media (max-width: 480px) {
-  .card-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (min-width: 481px) and (max-width: 1023px) {
-  .card-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1024px) {
-  .card-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .card-grid.cols-4 {
-    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -924,14 +893,6 @@ h4 { font-size: 1rem; }
 .carousel-arrow:hover {
   opacity: 1;
   background: var(--bg-elevated);
-}
-
-.carousel-empty {
-  grid-column: 1 / -1;
-  text-align: center;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  padding: 8px 0;
 }
 
 /* ── Insights Archive Regenerate Button ────────────────────────── */

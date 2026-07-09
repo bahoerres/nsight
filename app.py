@@ -76,12 +76,6 @@ def md_filter(text):
     return Markup(markdown.markdown(text, extensions=["extra", "nl2br"]))
 
 
-@app.context_processor
-def inject_globals():
-    """Make active_page available in all templates."""
-    return {}
-
-
 # ── Static PWA routes ──────────────────────────────────────────────
 
 @app.route("/sw.js")
@@ -1704,7 +1698,6 @@ def nutrition():
                 "avg_label": target_label or "",
                 "status": status_text,
                 "status_color": status_color,
-                "no_data": False,
             })
 
     finally:

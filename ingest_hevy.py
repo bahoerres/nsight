@@ -619,16 +619,6 @@ MEASUREMENT_FIELD_MAP = {
     "right_calf_cm": "right_calf_cm",
 }
 
-DB_MEASUREMENT_COLS = [
-    "weight_kg", "lean_mass_kg", "fat_percent",
-    "neck_cm", "shoulder_cm", "chest_cm",
-    "left_bicep_cm", "right_bicep_cm",
-    "left_forearm_cm", "right_forearm_cm",
-    "abdomen_cm", "waist_cm", "hips_cm",
-    "left_thigh_cm", "right_thigh_cm",
-    "left_calf_cm", "right_calf_cm",
-]
-
 
 def upsert_body_measurements(conn, measurements: list[dict]) -> int:
     """Upsert body measurements and bridge weight to daily_log."""
