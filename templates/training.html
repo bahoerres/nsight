@@ -461,7 +461,7 @@
     <div class="acwr-header">
       <div class="acwr-header-left">
         <h4>Acute:Chronic Workload Ratio</h4>
-        <p class="chart-card-subtitle">7-day acute / 28-day chronic load</p>
+        <p class="chart-card-subtitle">7-day acute load vs the 21 days before it</p>
       </div>
       <div class="acwr-current">
         {% if current_acwr is not none %}
@@ -469,7 +469,8 @@
           <span class="acwr-zone-badge zone-{{ acwr_zone_color }}">{{ acwr_zone }}</span>
         {% else %}
           <span class="acwr-value">--</span>
-          <span class="acwr-zone-badge zone-muted">No data</span>
+          <span class="acwr-zone-badge zone-muted">No baseline</span>
+          <p class="chart-card-subtitle">Not enough training in the prior 21 days to compare against.</p>
         {% endif %}
       </div>
     </div>
