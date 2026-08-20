@@ -25,7 +25,7 @@ from datetime import date, datetime, timedelta
 from calendar import monthrange
 
 from tz import today as local_today
-from scoring import CARB_DAY_MIDPOINT, compute_acwr
+from scoring import CARB_DAY_MIDPOINT, FAT_TARGET, PROTEIN_TARGET, compute_acwr
 
 import anthropic
 import psycopg2
@@ -715,7 +715,7 @@ NUTRITION:
         "425g carbs / 3,360 kcal" if trained else "325g carbs / 2,960 kcal"
     )
     return f"""You are a personal health analyst. Here is the athlete's data for {day_name}, {d["date"]}:
-NOTE: {day_name} was a {carb_day_type} day. Evaluate nutrition against {carb_day_type} targets: 280g protein / {carb_target} / 60g fat.
+NOTE: {day_name} was a {carb_day_type} day. Evaluate nutrition against {carb_day_type} targets: {PROTEIN_TARGET:.0f}g protein / {carb_target} / {FAT_TARGET:.0f}g fat.
 
 {day_name.upper()}'S METRICS:
 - HRV: {_fmt(d.get("hrv_nightly_avg"), ".1f", " ms")}{hrv_delta_str} (personal baseline: {_fmt(b.get("hrv_baseline"), ".1f", " ms")})
@@ -763,7 +763,7 @@ def build_weekly_prompt(data: dict) -> str:
         nutrition_section = f"""
 NUTRITION ({c["crono_days"]} days logged):
 - Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~3,189 at 4 high / 3 low days)
-- Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target 280g)
+- Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target {PROTEIN_TARGET:.0f}g)
 - Carb day split: {cs.get("high_days", 0)} high / {cs.get("low_days", 0)} low (target 4 high / 3 low){carb_split_note}"""
 
     muscles_str = ", ".join(data["muscles"]) if data["muscles"] else "none logged"
@@ -904,7 +904,7 @@ TRAINING LOAD:
         nutrition_section = f"""
 NUTRITION ({c["crono_days"]} days logged of 30):
 - Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~3,189 at 4 high / 3 low days)
-- Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target 280g)"""
+- Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target {PROTEIN_TARGET:.0f}g)"""
 
     # Exercise progression section (best set per week, showing trend)
     progression_section = ""

@@ -15,6 +15,8 @@ from markupsafe import Markup
 from zoneinfo import ZoneInfo
 
 from scoring import (
+    FAT_TARGET,
+    PROTEIN_TARGET,
     acwr_from_volume_by_date,
     compute_acwr,
     fetch_baselines,
@@ -1452,7 +1454,7 @@ def nutrition():
         high_day = targets.get("high_day", False)
         cal_target = targets.get("calories", 2960)
         carb_target = targets.get("carbs_g", 325)
-        protein_target = targets.get("protein_g", 280)
+        protein_target = targets.get("protein_g", PROTEIN_TARGET)
 
         # Raw values from yesterday
         cal_actual = components.get("calories_raw")
@@ -1557,9 +1559,9 @@ def nutrition():
         trend_defs = [
             # (key, col, label, unit, target_val, target_label, format_fn)
             ("calories",  "crono_calories",   "Calories Consumed", "kcal", None,   None,               "int_comma"),
-            ("protein",   "crono_protein_g",  "Protein",           "g",    280,    "Target 280g",      "int"),
+            ("protein",   "crono_protein_g",  "Protein",           "g",    PROTEIN_TARGET, f"Target {PROTEIN_TARGET:.0f}g", "int"),
             ("carbs",     "crono_carbs_g",    "Carbohydrates",     "g",    None,   None,               "int"),
-            ("fat",       "crono_fat_g",      "Total Fat",         "g",    50,     "Target 50g",       "int"),
+            ("fat",       "crono_fat_g",      "Total Fat",         "g",    FAT_TARGET, f"Target {FAT_TARGET:.0f}g", "int"),
             ("fiber",     "crono_fiber_g",    "Fiber",             "g",    None,   "Target 26 – 34g",  "one_dec"),
             ("sodium",    "crono_sodium_mg",  "Sodium",            "mg",   None,   "Target 3,500 – 4,500mg", "int_comma"),
             ("potassium", "crono_potassium_mg", "Potassium",       "mg",   3800,   "Target 3,800mg",   "int_comma"),
@@ -1586,15 +1588,13 @@ def nutrition():
             if fmt == "water_oz":
                 sparkline = [round(v / 29.5735, 1) if v else 0 for v in sparkline]
 
-            # Day-specific targets for calories and carbs
+            # Calories and carbs vary by carb-day type — reuse the targets already
+            # resolved for yesterday rather than re-deriving them from the weekday.
             if key == "calories":
-                # Use yesterday's target for the pill
-                dow = yesterday.weekday()
-                day_target = 3170 if dow in (1, 2) else 2770
+                day_target = cal_target
                 target_label = f"Target {int(day_target):,} kcal"
             elif key == "carbs":
-                dow = yesterday.weekday()
-                day_target = 400 if dow in (1, 2) else 300
+                day_target = carb_target
                 target_label = f"Target {int(day_target)}g"
 
             # Status: compare current vs target

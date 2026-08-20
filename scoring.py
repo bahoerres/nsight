@@ -606,9 +606,11 @@ def compute_training_score(conn, target_date):
 # Nutrition Score
 # ---------------------------------------------------------------------------
 
-# (calories, carbs_g) for each carb-day type. Protein is 280g and fat 60g on both.
+# (calories, carbs_g) for each carb-day type. Protein and fat are flat across both.
 HIGH_DAY = (3360.0, 425.0)
 LOW_DAY = (2960.0, 325.0)
+PROTEIN_TARGET = 280.0
+FAT_TARGET = 60.0  # not scored, but displayed and quoted in insight prompts
 
 # How close a day's carbs must land to a prescribed target to count as that day
 # type regardless of whether a session was logged. 325 and 425 are 30% apart, so
@@ -664,7 +666,7 @@ def compute_nutrition_score(conn, target_date):
                 cal_target, carb_target = pair
                 break
 
-    protein_target = 280.0
+    protein_target = PROTEIN_TARGET
 
     targets = {
         "calories":  cal_target,
