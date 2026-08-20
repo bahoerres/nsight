@@ -378,10 +378,10 @@ def compute_recovery_score(conn, target_date, baselines):
 ACWR_MIN_CHRONIC_SESSIONS = 6
 
 
-def compute_acwr(conn, target_date):
+def acwr_from_volume_by_date(vol_by_date, target_date):
     """
-    Uncoupled acute:chronic workload ratio, the single definition used
-    everywhere (scoring and insight generation).
+    Uncoupled acute:chronic workload ratio — the single definition of ACWR,
+    used by scoring, insight generation, and the training chart.
 
       acute   = 7-day volume         (target-6  .. target)
       chronic = the 21 days before   (target-27 .. target-7), normalized to a week
@@ -391,39 +391,44 @@ def compute_acwr(conn, target_date):
     divided by 4) any week where all 28-day volume lands inside the acute
     window returns exactly 4.00 no matter what the athlete actually lifted.
 
+    `vol_by_date` is {date: volume}; missing dates count as zero. A day with
+    volume > 0 counts as a training day — a session that recorded no tonnage
+    contributes nothing to a volume baseline either way.
+
     Returns None when the chronic window is too sparse to compare against.
     """
-    sql = """
-        SELECT
-            (SELECT COALESCE(SUM(hevy_total_volume_lbs), 0)
-             FROM daily_log WHERE date BETWEEN %s AND %s) AS acute_vol,
-            (SELECT COALESCE(SUM(hevy_total_volume_lbs), 0)
-             FROM daily_log WHERE date BETWEEN %s AND %s) AS chronic_vol,
-            (SELECT COUNT(*)
-             FROM daily_log WHERE date BETWEEN %s AND %s
-               AND hevy_session_count > 0)                AS chronic_sessions
-    """
-    acute_start   = target_date - timedelta(days=6)
-    chronic_start = target_date - timedelta(days=27)
-    chronic_end   = target_date - timedelta(days=7)
-    with conn.cursor() as cur:
-        cur.execute(
-            sql,
-            (acute_start, target_date,
-             chronic_start, chronic_end,
-             chronic_start, chronic_end),
-        )
-        row = cur.fetchone()
+    def window(lo, hi):
+        return [vol_by_date.get(lo + timedelta(days=k)) or 0.0
+                for k in range((hi - lo).days + 1)]
 
-    if not row:
-        return None
-    if (row.get("chronic_sessions") or 0) < ACWR_MIN_CHRONIC_SESSIONS:
-        return None
+    acute = sum(window(target_date - timedelta(days=6), target_date))
+    chronic = window(target_date - timedelta(days=27), target_date - timedelta(days=7))
 
-    weekly_chronic = (_f(row.get("chronic_vol")) or 0.0) / 3.0
+    if sum(1 for v in chronic if v > 0) < ACWR_MIN_CHRONIC_SESSIONS:
+        return None
+    weekly_chronic = sum(chronic) / 3.0
     if weekly_chronic <= 0:
         return None
-    return (_f(row.get("acute_vol")) or 0.0) / weekly_chronic
+    return acute / weekly_chronic
+
+
+def compute_acwr(conn, target_date):
+    """ACWR for target_date, read straight from daily_log. See
+    acwr_from_volume_by_date for the definition."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT date, hevy_total_volume_lbs
+            FROM daily_log
+            WHERE date BETWEEN %s AND %s
+            """,
+            (target_date - timedelta(days=27), target_date),
+        )
+        rows = cur.fetchall()
+    return acwr_from_volume_by_date(
+        {r["date"]: _f(r.get("hevy_total_volume_lbs")) or 0.0 for r in rows},
+        target_date,
+    )
 
 
 def compute_training_score(conn, target_date):

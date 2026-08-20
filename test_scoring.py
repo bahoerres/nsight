@@ -1,17 +1,26 @@
-"""Self-checks for the two rules that broke under the PB3 switch.
+"""Self-checks for the rules that broke under the PB3 switch.
 
 Run: .venv/bin/python test_scoring.py
 """
-from datetime import date
+from datetime import date, timedelta
 
-from scoring import ACWR_MIN_CHRONIC_SESSIONS, compute_acwr, compute_nutrition_score
+from scoring import (
+    ACWR_MIN_CHRONIC_SESSIONS,
+    acwr_from_volume_by_date,
+    compute_acwr,
+    compute_nutrition_score,
+)
+
+TARGET = date(2026, 8, 20)
+
+
+def _series(days_and_volumes):
+    return {TARGET - timedelta(days=d): v for d, v in days_and_volumes}
 
 
 class FakeCursor:
-    """Records params, replays a canned row."""
-
-    def __init__(self, row, sink):
-        self.row, self.sink = row, sink
+    def __init__(self, rows, sink):
+        self.rows, self.sink = rows, sink
 
     def __enter__(self):
         return self
@@ -23,45 +32,60 @@ class FakeCursor:
         self.sink.append(params)
 
     def fetchone(self):
-        return self.row
+        return self.rows[0] if self.rows else None
+
+    def fetchall(self):
+        return self.rows
 
 
 class FakeConn:
-    def __init__(self, row):
-        self.row, self.params = row, []
+    def __init__(self, rows):
+        self.rows = rows if isinstance(rows, list) else [rows]
+        self.params = []
 
     def cursor(self):
-        return FakeCursor(self.row, self.params)
-
-
-TARGET = date(2026, 8, 20)
+        return FakeCursor(self.rows, self.params)
 
 
 def test_acwr_windows_do_not_overlap():
-    conn = FakeConn({"acute_vol": 30000, "chronic_vol": 63000, "chronic_sessions": 9})
-    acwr = compute_acwr(conn, TARGET)
-    acute_start, acute_end, chronic_start, chronic_end, _, _ = conn.params[0]
-    assert (acute_start, acute_end) == (date(2026, 8, 14), TARGET)
-    assert (chronic_start, chronic_end) == (date(2026, 7, 24), date(2026, 8, 13))
-    # Uncoupled: acute must end after chronic does, and never sit inside it.
-    assert chronic_end < acute_start
-    # 63000 over 21 days = 21000/week; 30000/21000
-    assert abs(acwr - 30000 / 21000) < 1e-9
+    # 9 chronic sessions of 7000 in days 7..27, 30000 across the acute week.
+    vol = _series([(d, 7000.0) for d in range(7, 28, 2)] + [(0, 30000.0)])
+    assert sum(1 for d in range(7, 28, 2)) == 11
+    acwr = acwr_from_volume_by_date(vol, TARGET)
+    # chronic = 11 * 7000 over 21 days -> /3 for a weekly figure
+    assert abs(acwr - 30000.0 / (11 * 7000.0 / 3.0)) < 1e-9
 
 
 def test_acwr_cannot_be_pinned_at_four():
-    """The old coupled form returned exactly 4.00 whenever all 28-day volume
-    landed inside the acute window. The uncoupled form reports nothing."""
-    conn = FakeConn({"acute_vol": 73849.5, "chronic_vol": 0, "chronic_sessions": 0})
-    assert compute_acwr(conn, TARGET) is None
+    """The coupled form returned exactly 4.00 whenever all 28-day volume landed
+    inside the acute window — Blake's real 2026-08-08..08-14 readings. The
+    uncoupled form reports nothing, because there is nothing to compare to."""
+    only_this_week = _series([(0, 15904.5), (2, 33060.0), (3, 24885.0)])
+    assert acwr_from_volume_by_date(only_this_week, TARGET) is None
 
 
 def test_acwr_guards_sparse_baseline():
-    sparse = {"acute_vol": 70000, "chronic_vol": 26230,
-              "chronic_sessions": ACWR_MIN_CHRONIC_SESSIONS - 1}
-    assert compute_acwr(FakeConn(sparse), TARGET) is None
-    enough = dict(sparse, chronic_sessions=ACWR_MIN_CHRONIC_SESSIONS)
-    assert compute_acwr(FakeConn(enough), TARGET) is not None
+    acute = [(0, 70000.0)]
+    sparse = _series(acute + [(7 + i, 5000.0) for i in range(ACWR_MIN_CHRONIC_SESSIONS - 1)])
+    assert acwr_from_volume_by_date(sparse, TARGET) is None
+    enough = _series(acute + [(7 + i, 5000.0) for i in range(ACWR_MIN_CHRONIC_SESSIONS)])
+    assert acwr_from_volume_by_date(enough, TARGET) is not None
+
+
+def test_acwr_ignores_zero_volume_days():
+    """Rest days sit in the map as 0.0 and must not count toward the baseline."""
+    vol = _series([(0, 70000.0)] + [(d, 0.0) for d in range(7, 28)])
+    assert acwr_from_volume_by_date(vol, TARGET) is None
+
+
+def test_compute_acwr_reads_the_right_window():
+    rows = [{"date": TARGET - timedelta(days=d), "hevy_total_volume_lbs": 5000.0}
+            for d in range(7, 7 + ACWR_MIN_CHRONIC_SESSIONS)]
+    rows.append({"date": TARGET, "hevy_total_volume_lbs": 20000.0})
+    conn = FakeConn(rows)
+    assert compute_acwr(conn, TARGET) is not None
+    lo, hi = conn.params[0]
+    assert (lo, hi) == (TARGET - timedelta(days=27), TARGET)
 
 
 def test_carb_target_follows_the_session_not_the_weekday():

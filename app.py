@@ -15,6 +15,8 @@ from markupsafe import Markup
 from zoneinfo import ZoneInfo
 
 from scoring import (
+    acwr_from_volume_by_date,
+    compute_acwr,
     fetch_baselines,
     compute_sleep_score,
     compute_recovery_score,
@@ -952,35 +954,20 @@ def training():
             vol_ma_data.append(round(sum(ma_vals) / len(ma_vals)) if ma_vals else None)
 
         # ── ACWR (30 days) ──────────────────────────────────────────
-        # Need ~58 days of lookback for 28-day chronic window
+        # ma_by_date already spans 58 days, enough for each point's 28-day lookback.
         acwr_labels = []
         acwr_data = []
         for i in range(30):
             d = today - timedelta(days=29 - i)
             acwr_labels.append(d.strftime("%-m/%-d"))
-
-            # 7-day acute load
-            acute_vals = []
-            for j in range(7):
-                ad = d - timedelta(days=j)
-                acute_vals.append(ma_by_date.get(ad, 0))
-            acute_avg = sum(acute_vals) / 7.0
-
-            # 28-day chronic load
-            chronic_vals = []
-            for j in range(28):
-                cd = d - timedelta(days=j)
-                chronic_vals.append(ma_by_date.get(cd, 0))
-            chronic_avg = sum(chronic_vals) / 28.0
-
-            if chronic_avg > 0:
-                acwr_data.append(round(acute_avg / chronic_avg, 2))
-            else:
-                acwr_data.append(None)
+            a = acwr_from_volume_by_date(ma_by_date, d)
+            acwr_data.append(round(a, 2) if a is not None else None)
 
         # Current ACWR value and zone label
         current_acwr = acwr_data[-1] if acwr_data else None
-        acwr_zone = "Unknown"
+        # No baseline is a real state, not an error: after a layoff or a program
+        # change there is nothing in the prior 21 days worth comparing against.
+        acwr_zone = "No baseline"
         acwr_zone_color = "muted"
         if current_acwr is not None:
             if current_acwr < 0.8:
@@ -1859,28 +1846,7 @@ def fetch_period_data(days: int = 14) -> dict:
     )
     training = dict(cur.fetchone())
 
-    # ---- ACWR ----
-    cur.execute(
-        """
-        SELECT
-            ROUND(
-                NULLIF(AVG(CASE WHEN date >= %s THEN hevy_total_volume_lbs END), 0) /
-                NULLIF(AVG(CASE WHEN date >= %s THEN hevy_total_volume_lbs END), 0)
-            ::numeric, 2) AS acwr
-        FROM daily_log
-        WHERE date BETWEEN %s AND %s
-    """,
-        (
-            period_end - timedelta(days=6),
-            period_end - timedelta(days=27),
-            period_end - timedelta(days=27),
-            period_end,
-        ),
-    )
-    acwr_row = cur.fetchone()
-    training["acwr"] = (
-        float(acwr_row["acwr"]) if acwr_row and acwr_row["acwr"] else None
-    )
+    training["acwr"] = compute_acwr(conn, period_end)
 
     conn.close()
     return {
@@ -1919,13 +1885,14 @@ def build_scores(data: dict) -> dict:
     t = data["training"]
     if t["acwr"] and t["acwr"] > 1.3:
         fatigue_score = max(4, recovery_score - 2)
-        fatigue_ctx = f"ACWR {t['acwr']} \u2014 above optimal range"
+        fatigue_ctx = f"ACWR {t['acwr']:.2f} \u2014 above optimal range"
     elif t["acwr"] and t["acwr"] < 0.8:
         fatigue_score = min(9, recovery_score + 1)
-        fatigue_ctx = f"ACWR {t['acwr']} \u2014 deload territory"
+        fatigue_ctx = f"ACWR {t['acwr']:.2f} \u2014 deload territory"
     else:
         fatigue_score = recovery_score
-        fatigue_ctx = f"ACWR {t['acwr'] or 'n/a'} \u2014 within range"
+        fatigue_ctx = (f"ACWR {t['acwr']:.2f} \u2014 within range" if t["acwr"]
+                       else "ACWR n/a \u2014 not enough training history to compare against")
 
     return {
         "sleep_quality": (sleep_score, sleep_ctx),
@@ -1992,18 +1959,18 @@ def build_flags(data: dict, scores: dict) -> list[dict]:
             flags.append(
                 {
                     "type": "warn",
-                    "text": f"ACWR {t['acwr']} \u2014 acute load above optimal range",
+                    "text": f"ACWR {t['acwr']:.2f} \u2014 acute load above optimal range",
                 }
             )
         elif t["acwr"] < 0.8:
             flags.append(
-                {"type": "info", "text": f"ACWR {t['acwr']} \u2014 deload territory"}
+                {"type": "info", "text": f"ACWR {t['acwr']:.2f} \u2014 deload territory"}
             )
         else:
             flags.append(
                 {
                     "type": "good",
-                    "text": f"ACWR {t['acwr']} \u2014 training load within optimal range",
+                    "text": f"ACWR {t['acwr']:.2f} \u2014 training load within optimal range",
                 }
             )
 
@@ -2070,7 +2037,7 @@ def build_narrative(data: dict, scores: dict) -> str:
         )
 
     if t["session_count"] and t["total_volume"]:
-        acwr_str = f" ACWR {t['acwr']}." if t["acwr"] else ""
+        acwr_str = f" ACWR {t['acwr']:.2f}." if t["acwr"] else ""
         lines.append(
             f"Logged {t['session_count']} training sessions, "
             f"{int(t['total_volume']):,} lbs total volume.{acwr_str}"
