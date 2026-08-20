@@ -606,6 +606,19 @@ def compute_training_score(conn, target_date):
 # Nutrition Score
 # ---------------------------------------------------------------------------
 
+# (calories, carbs_g) for each carb-day type. Protein is 280g and fat 60g on both.
+HIGH_DAY = (3360.0, 425.0)
+LOW_DAY = (2960.0, 325.0)
+
+# How close a day's carbs must land to a prescribed target to count as that day
+# type regardless of whether a session was logged. 325 and 425 are 30% apart, so
+# no day can satisfy both.
+CARB_DAY_MATCH_TOLERANCE = 0.12
+
+# Midpoint between the two carb targets — classifies a logged day as high or low.
+CARB_DAY_MIDPOINT = (HIGH_DAY[1] + LOW_DAY[1]) / 2
+
+
 
 def compute_nutrition_score(conn, target_date):
     """
@@ -635,11 +648,22 @@ def compute_nutrition_score(conn, target_date):
         cur.execute(sql, (target_date,))
         row = cur.fetchone()
 
-    # Day type follows the session that actually happened, not the calendar —
-    # PB3 sessions move around and the carb target is meant to follow the work.
-    # (Replaces the old fixed Tue/Wed 5-2 carb cycle.)
+    # The rule is 4 high / 3 low per week. High days usually land on training
+    # days, but swapping one is normal and not a compliance failure — so if the
+    # day's carbs clearly hit one of the two prescribed targets, believe that
+    # over the session. The targets are 30% apart and the band below is 12%, so
+    # a day can match at most one; anything in between or beyond falls back to
+    # the session and gets scored on the miss.
     training_day = bool(row and (row.get("hevy_session_count") or 0) > 0)
-    cal_target, carb_target = (3360.0, 425.0) if training_day else (2960.0, 325.0)
+    carbs_logged = _f(row.get("crono_carbs_g")) if row else None
+
+    cal_target, carb_target = HIGH_DAY if training_day else LOW_DAY
+    if carbs_logged is not None:
+        for pair in (HIGH_DAY, LOW_DAY):
+            if abs(carbs_logged - pair[1]) / pair[1] <= CARB_DAY_MATCH_TOLERANCE:
+                cal_target, carb_target = pair
+                break
+
     protein_target = 280.0
 
     targets = {
@@ -647,6 +671,7 @@ def compute_nutrition_score(conn, target_date):
         "protein_g": protein_target,
         "carbs_g":   carb_target,
         "training_day": training_day,
+        "high_day":  carb_target == HIGH_DAY[1],
     }
 
     if row is None:
@@ -983,8 +1008,7 @@ def generate_hero_summary(category, score, data):
         protein_sc = components.get("protein")
         cal        = components.get("calories_raw")
         cal_sc     = components.get("calories")
-        training   = targets.get("training_day", False)
-        day_type   = "training" if training else "rest"
+        day_type   = "high" if targets.get("high_day") else "low"
 
         if score >= 80:
             parts = []

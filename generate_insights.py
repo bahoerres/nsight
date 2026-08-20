@@ -25,7 +25,7 @@ from datetime import date, datetime, timedelta
 from calendar import monthrange
 
 from tz import today as local_today
-from scoring import compute_acwr
+from scoring import CARB_DAY_MIDPOINT, compute_acwr
 
 import anthropic
 import psycopg2
@@ -240,6 +240,18 @@ def _fetch_weekly_data_raw(conn, week_start: date, week_end: date) -> dict | Non
     )
     baselines = cur.fetchone()
 
+    # Carb day split — the rule is 4 high / 3 low per week. High days usually
+    # fall on training days but do not have to; only the weekly count matters.
+    cur.execute(
+        """SELECT
+               COUNT(*) FILTER (WHERE crono_carbs_g >= %s) AS high_days,
+               COUNT(*) FILTER (WHERE crono_carbs_g <  %s) AS low_days
+           FROM daily_log
+           WHERE date BETWEEN %s AND %s AND crono_carbs_g IS NOT NULL""",
+        (CARB_DAY_MIDPOINT, CARB_DAY_MIDPOINT, week_start, week_end),
+    )
+    carb_split = cur.fetchone()
+
     # Muscle groups this week
     cur.execute(
         """SELECT DISTINCT unnest(hevy_muscle_groups) as mg
@@ -256,6 +268,7 @@ def _fetch_weekly_data_raw(conn, week_start: date, week_end: date) -> dict | Non
         "prior": dict(prior),
         "baselines": dict(baselines),
         "acwr": compute_acwr(conn, week_end),
+        "carb_split": dict(carb_split) if carb_split else {},
         "muscles": muscles,
         "exercise_data": fetch_weekly_exercise_data(conn, week_start, week_end),
     }
@@ -740,12 +753,18 @@ def build_weekly_prompt(data: dict) -> str:
     hrv_delta = _pct_delta(c.get("hrv_avg"), b.get("hrv_baseline"))
     hrv_delta_str = f"{hrv_delta:+.0f}%" if hrv_delta is not None else "n/a"
 
+    cs = data.get("carb_split", {})
+    carb_split_note = (
+        " — on target" if cs.get("high_days") == 4 and cs.get("low_days") == 3
+        else " — off the 4/3 target; worth a mention only if it repeats"
+    )
     nutrition_section = ""
     if c.get("crono_days") and c["crono_days"] > 0:
         nutrition_section = f"""
 NUTRITION ({c["crono_days"]} days logged):
 - Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~3,189 at 4 high / 3 low days)
-- Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target 280g)"""
+- Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target 280g)
+- Carb day split: {cs.get("high_days", 0)} high / {cs.get("low_days", 0)} low (target 4 high / 3 low){carb_split_note}"""
 
     muscles_str = ", ".join(data["muscles"]) if data["muscles"] else "none logged"
 

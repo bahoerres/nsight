@@ -6,6 +6,9 @@ from datetime import date, timedelta
 
 from scoring import (
     ACWR_MIN_CHRONIC_SESSIONS,
+    CARB_DAY_MATCH_TOLERANCE,
+    HIGH_DAY,
+    LOW_DAY,
     acwr_from_volume_by_date,
     compute_acwr,
     compute_nutrition_score,
@@ -88,17 +91,47 @@ def test_compute_acwr_reads_the_right_window():
     assert (lo, hi) == (TARGET - timedelta(days=27), TARGET)
 
 
-def test_carb_target_follows_the_session_not_the_weekday():
-    base = {"crono_calories": 3000, "crono_protein_g": 280, "crono_carbs_g": 400,
-            "crono_fiber_g": 30, "crono_sodium_mg": 4000}
-    trained = compute_nutrition_score(FakeConn(dict(base, hevy_session_count=1)), TARGET)
-    rested = compute_nutrition_score(FakeConn(dict(base, hevy_session_count=0)), TARGET)
-    assert trained["targets"] == {"calories": 3360.0, "protein_g": 280.0,
-                                  "carbs_g": 425.0, "training_day": True}
-    assert rested["targets"] == {"calories": 2960.0, "protein_g": 280.0,
-                                 "carbs_g": 325.0, "training_day": False}
-    # TARGET is a Thursday — under the old 5/2 cycle both would have been "low-carb".
+def _nutrition(carbs, sessions, calories=3000):
+    row = {"crono_calories": calories, "crono_protein_g": 280, "crono_carbs_g": carbs,
+           "crono_fiber_g": 30, "crono_sodium_mg": 4000, "hevy_session_count": sessions}
+    return compute_nutrition_score(FakeConn(row), TARGET)["targets"]
+
+
+def test_carb_target_follows_the_session_when_nothing_contradicts_it():
+    assert _nutrition(None, 1)["carbs_g"] == HIGH_DAY[1]
+    assert _nutrition(None, 0)["carbs_g"] == LOW_DAY[1]
+    # TARGET is a Thursday — under the old 5/2 cycle both would have been low-carb.
     assert TARGET.weekday() == 3
+
+
+def test_logged_carbs_override_the_session_on_a_swap():
+    """Blake's real 2026-08-17 and 08-19: a high day on a rest day and a low day
+    on a training day. The week was still exactly 4 high / 3 low, so neither is
+    a miss."""
+    high_on_rest = _nutrition(430.8, 0)
+    assert high_on_rest["carbs_g"] == HIGH_DAY[1] and high_on_rest["high_day"]
+    assert high_on_rest["training_day"] is False
+
+    low_on_training = _nutrition(330.6, 1)
+    assert low_on_training["carbs_g"] == LOW_DAY[1] and not low_on_training["high_day"]
+    assert low_on_training["training_day"] is True
+
+
+def test_a_genuine_miss_still_scores_against_the_session_target():
+    """500g is 18% past the high target — matches neither, so it does not get to
+    pick the target that flatters it."""
+    assert _nutrition(500.0, 0)["carbs_g"] == LOW_DAY[1]
+    assert _nutrition(200.0, 1)["carbs_g"] == HIGH_DAY[1]
+    # A day stranded between the two bands also falls back to the session.
+    stranded = (LOW_DAY[1] * (1 + CARB_DAY_MATCH_TOLERANCE)
+                + HIGH_DAY[1] * (1 - CARB_DAY_MATCH_TOLERANCE)) / 2
+    assert _nutrition(stranded, 1)["carbs_g"] == HIGH_DAY[1]
+    assert _nutrition(stranded, 0)["carbs_g"] == LOW_DAY[1]
+
+
+def test_the_two_carb_bands_never_overlap():
+    """The override is only safe because a day cannot satisfy both targets."""
+    assert LOW_DAY[1] * (1 + CARB_DAY_MATCH_TOLERANCE) < HIGH_DAY[1] * (1 - CARB_DAY_MATCH_TOLERANCE)
 
 
 if __name__ == "__main__":

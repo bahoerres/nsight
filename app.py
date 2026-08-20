@@ -1449,6 +1449,7 @@ def nutrition():
         components = nutrition_result.get("components", {})
 
         training_day = targets.get("training_day", False)
+        high_day = targets.get("high_day", False)
         cal_target = targets.get("calories", 2960)
         carb_target = targets.get("carbs_g", 325)
         protein_target = targets.get("protein_g", 280)
@@ -1505,17 +1506,18 @@ def nutrition():
                 "value": f"{int(carbs_actual)}" if carbs_actual is not None else "--",
                 "unit": "g",
                 "delta": f"{carbs_delta:+}" if carbs_delta is not None else "--",
-                "target_label": f"vs {int(carb_target)}g" + (" (training)" if training_day else ""),
+                "target_label": f"vs {int(carb_target)}g" + (" (high)" if high_day else " (low)"),
                 "status": carbs_status,
             },
         ]
 
         # ── Hero summary ─────────────────────────────────────────────
         yesterday_name = yesterday.strftime("%A")
-        day_type = "training" if training_day else "rest"
+        day_type = ("high-carb" if high_day else "low-carb") + (
+            " training" if training_day else " rest")
         hero_summary = generate_hero_summary(
             "nutrition", nutrition_score,
-            {"targets": {"training_day": training_day}, "components": components},
+            {"targets": {"high_day": high_day}, "components": components},
         )
         # Prepend day type context — note: data is for yesterday
         hero_summary = f"{yesterday_name} was a {day_type} day. {hero_summary}"

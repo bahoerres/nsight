@@ -38,7 +38,10 @@ NUTRITION:
   progression. High days usually land on training days because that is
   convenient, but they are NOT required to. A high day on a rest day, or a low
   day on a training day, is a normal swap — not a compliance failure. Only the
-  weekly count is worth commenting on, and only if it drifts off 4/3.
+  weekly count is worth commenting on, and only if it drifts off 4/3 more than
+  once. Nutrition scoring already reads each day against whichever target the
+  logged carbs actually hit, so a day scored as "high" on a rest day is
+  correct, not a mislabel.
 - High-day intake is intentional. Never flag it as a surplus.
 - This replaced a 4 high / 2 low cycle with a double-carb refeed, which was less
   balanced for bodyweight progression. Ignore any older reference to fixed
