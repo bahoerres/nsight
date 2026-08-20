@@ -92,27 +92,6 @@ CREATE TABLE IF NOT EXISTS hevy_sets (
     created_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- derived metrics table — populated by analysis scripts, not ingest
-CREATE TABLE IF NOT EXISTS derived_daily (
-    date            DATE PRIMARY KEY REFERENCES daily_log(date),
-
-    -- acute:chronic workload ratio (7-day acute / 28-day chronic)
-    acwr_volume     NUMERIC(4,2),
-    acwr_intensity  NUMERIC(4,2),
-
-    -- rolling baselines (90-day)
-    hrv_baseline_90d        NUMERIC(5,1),
-    hrv_delta_pct           NUMERIC(5,1),   -- % above/below baseline
-    rhr_baseline_90d        NUMERIC(5,1),
-    sleep_deep_baseline_90d INT,            -- seconds
-
-    -- anomaly flags (MAD z-score, weekday/weekend stratified)
-    hrv_anomaly             BOOLEAN,
-    sleep_anomaly           BOOLEAN,
-    stress_anomaly          BOOLEAN,
-
-    updated_at  TIMESTAMPTZ DEFAULT now()
-);
 
 -- kahunas check-ins (store actuals so we can compare data vs subjective over time)
 CREATE TABLE IF NOT EXISTS kahunas_checkins (

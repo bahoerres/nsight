@@ -1,26 +1,43 @@
 Blake is a 40-something butcher apprentice at Whole Foods training seriously with
-coach Jeff Black (Kahunas.io). Current phase: mass phase targeting 225-230 lbs.
+coach Jeff Black (Kahunas.io). Current program: Ben Pollack's Powerbuilding 3,
+started 2026-08-13 — 10 weeks, two four-week blocks, week 9 deload, week 10
+re-test. Goal is a 1,000 lb powerlifting total (squat + bench + deadlift); he is
+pushing maxes now rather than deferring them.
 
 TRAINING STYLE:
-- DoggCrapp-inspired: very high intensity, very low volume per session.
-- Most Hevy sets are warmups — working sets are few but brutal.
-- 4-day training week with 3-4 day gaps between sessions by design. Do not flag
-  multi-day rest gaps as concerning unless recovery metrics decline across the gap.
+- Percentage-driven powerbuilding: moderate intensity, high total volume.
+  Speed work (8x2) and 5x5 blocks mean set counts are high and most sets are
+  real work, not warmups. Total tonnage per session is far above his prior
+  DoggCrapp-style block.
+- 4-day training week: Friday / Saturday / Monday / Tuesday, with a Wednesday
+  review. Gaps of 1-3 days between sessions are the program. Do not flag
+  back-to-back training days or 1-3 day gaps as a problem. A gap of 5+ days is
+  worth noting.
 - Training week starts Friday and runs through Thursday. When referencing
   "this week" or "last week" in insights, use Fri-Thu windows, not Mon-Sun.
   Week-over-week volume/session comparisons should align to this cycle.
-- ACWR zones (calibrated for enhanced recovery capacity):
-  <0.8 = detraining | 0.8–1.3 = optimal | 1.3–1.7 = calculated overreach (expected)
-  >1.7 = overtraining risk. Only flag above 1.7, and even then assess alongside
-  recovery trends, not in isolation.
+- ACWR: he returned to consistent training in August 2026 after a light
+  June-July, and changed programs on 2026-08-13. Both are step changes in
+  tonnage, so the acute:chronic ratio will read high through roughly
+  2026-09-10 while the 21-day chronic baseline refills with PB3 data. This is
+  expected and self-correcting. Where ACWR is reported at all, treat it as
+  context, not a warning: do not build a recovery narrative around a high
+  reading during this window. If it is reported as unavailable, that means the
+  baseline is too sparse to compare against — say nothing about load ratio
+  rather than inventing one.
+- The old DoggCrapp-era ACWR zones (1.3-1.7 = expected overreach) were
+  calibrated for a different program. Do not cite fixed zones until PB3 has
+  four weeks of its own baseline.
 
 NUTRITION:
-- 5/2 carb-cycling rotation (fixed schedule, not tied to actual workout days):
-  High-carb days (Tue/Wed): 280g protein / 400g carbs / 50g fat / 3,170 kcal
-  Low-carb days (all other):  280g protein / 300g carbs / 50g fat / 2,770 kcal
-  Weekly avg target: ~2,884 kcal/day
-- High-carb day intake is intentional. Do not flag as surplus.
-  Evaluate each day against its appropriate target based on day of week.
+- Training/non-training carb split (follows the actual session, not the calendar):
+  Training days:     280g protein / 425g carbs / 60g fat / 3,360 kcal
+  Non-training days: 280g protein / 325g carbs / 60g fat / 2,960 kcal
+  Weekly avg target: ~3,189 kcal/day on a 4-day training week
+- Training-day intake is intentional. Do not flag as surplus. Evaluate each day
+  against the target for that day's type.
+- This replaced a fixed 5/2 Tue/Wed carb cycle. Ignore any older reference to
+  high-carb/low-carb days by day of week.
 - Additional targets: Fiber 26-34g | Water 120 oz | Sodium 3,500-4,500mg |
   Potassium 3,800mg
 

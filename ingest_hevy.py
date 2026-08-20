@@ -197,7 +197,6 @@ MUSCLE_MAP = {
     "Seated Curl (Dumbbell)": "biceps",
     "Preacher Curl (Machine)": "biceps",
     # triceps
-    "Bench Press (Smith Machine)": "triceps",
     "Skullcrusher (Barbell)": "triceps",
     "Triceps Extension (Cable)": "triceps",
     "Triceps Pushdown": "triceps",
@@ -316,9 +315,91 @@ MUSCLE_MAP = {
     "Side Bend (Cable)": "core",
     "Side Plank": "core",
     "Torso Rotation": "core",
+    # --- added 2026-08-20 for Powerbuilding 3 ---
+    # chest
+    "Bench Press (Smith Machine)": "chest",
+    "Low-Incline Bench Press (Smith Machine)": "chest",
+    "Converging Chest Press": "chest",
+    "Banded Incline Hammer Press": "chest",
+    "Push Up - Close Grip": "chest",
+    # back
+    "Lat Pulldown - WIde Grip (Cable)": "back",
+    "Chin Up (Assisted)": "back",
+    # shoulders
+    "Seated Shoulder Press (Smith Machine)": "shoulders",
+    "Rear Delt Reverse Fly (Dumbbell)": "shoulders",
+    "Upright Row (Cable)": "shoulders",
+    # biceps
+    "Strive Preacher Curl": "biceps",
+    # triceps
+    "Band Pushdown": "triceps",
+    # legs
+    "Bulgarian Split Squat (Dumbbell)": "legs",
+    "Standing Leg Curls": "legs",
+    "Nautilus Leg Press": "legs",
+    "Leg Press Calf Raise": "legs",
+    # --- added 2026-08-20 from audit_routines.py (all saved routines) ---
+    # chest
+    "Bench Press (Dumbbell)": "chest",
+    "Chest Fly (Dumbbell)": "chest",
+    "Decline Hammer Press": "chest",
+    "Hex Press (Dumbbell)": "chest",
+    "Low Cable Fly Crossovers": "chest",
+    "Push Up (Weighted)": "chest",
+    # back
+    "Banded Meadows Row": "back",
+    "Bent Over Row (Smith Machine)": "back",
+    "Chest Supported Incline Row (Dumbbell)": "back",
+    "Chin Up": "back",
+    "Deficit Deadlift (25s)": "back",
+    "Dumbbell Row": "back",
+    "Inverted Row": "back",
+    "Pullover (Dumbbell)": "back",
+    "Seal Row (Barbell)": "back",
+    "Sumo Deadlift": "back",
+    # shoulders
+    "Arnold Press (Dumbbell)": "shoulders",
+    "Overhead Press (Barbell)": "shoulders",
+    "Plate Front Raise": "shoulders",
+    "Seated Lateral Raise (Dumbbell)": "shoulders",
+    "Seated Overhead Press (Dumbbell)": "shoulders",
+    "Upright Row (Barbell)": "shoulders",
+    "Upright Row (Dumbbell)": "shoulders",
+    "Upright Row (Smith Machine)": "shoulders",
+    # biceps
+    "21s Bicep Curl": "biceps",
+    "Bicep Curl (Barbell)": "biceps",
+    "Concentration Curl": "biceps",
+    "Hammer Curl (Cable)": "biceps",
+    # triceps
+    "JM Press (Barbell)": "triceps",
+    "Reverse Grip Triceps Pushdown": "triceps",
+    "Skullcrusher (Dumbbell)": "triceps",
+    "Triceps Dip": "triceps",
+    "Triceps Extension (Machine)": "triceps",
+    "Triceps Kickback (Dumbbell)": "triceps",
+    # legs
+    "Box Squat (Barbell)": "legs",
+    "Glute Bridge": "legs",
+    "Goblet Squat": "legs",
+    "Good Morning (Barbell)": "legs",
+    "Pause Squat (Barbell)": "legs",
+    "Sled Pull": "legs",
+    "Split Squat (Dumbbell)": "legs",
+    "Split Squat (Smith Machine)": "legs",
+    "Standing Calf Raise (Machine)": "legs",
+    "Stiff-Legged Deadlift": "legs",
+    "Straight Leg Deadlift": "legs",
+    # core
+    "Cable Core Pallof Press": "core",
+    "Crunch (Weighted)": "core",
+    "Decline Leg Raise": "core",
+    "Reverse Crunch": "core",
+    "Spiderman": "core",
+    "Vacuum Hold": "core",
+    # other
+    "Cycling": "other",
 }
-
-
 # ---------------------------------------------------------------------------
 # Bodyweight exercise handling
 # Hevy sends weight_kg=0 for these; substitute athlete's bodyweight
@@ -375,11 +456,12 @@ def infer_muscle_group(exercise_name: str) -> str:
     # exact match first
     if exercise_name in MUSCLE_MAP:
         return MUSCLE_MAP[exercise_name]
-    # fallback: log unknown so we can add it
+    # fallback: warn, not debug — an unmapped lift silently drops out of
+    # muscle-group coverage and misfiles its volume as "other".
     import logging
 
-    logging.getLogger(__name__).debug(
-        f"Unknown exercise, tagging as other: {exercise_name!r}"
+    logging.getLogger(__name__).warning(
+        f"Unmapped exercise, tagging as other (add to MUSCLE_MAP): {exercise_name!r}"
     )
     return "other"
 

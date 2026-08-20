@@ -372,6 +372,59 @@ def compute_recovery_score(conn, target_date, baselines):
 # Training Score
 # ---------------------------------------------------------------------------
 
+# Minimum training days in the chronic window for ACWR to carry information.
+# Below this, a return from layoff or a program change yields a huge ratio that
+# says nothing about injury risk — better to report nothing than a fake number.
+ACWR_MIN_CHRONIC_SESSIONS = 6
+
+
+def compute_acwr(conn, target_date):
+    """
+    Uncoupled acute:chronic workload ratio, the single definition used
+    everywhere (scoring and insight generation).
+
+      acute   = 7-day volume         (target-6  .. target)
+      chronic = the 21 days before   (target-27 .. target-7), normalized to a week
+
+    Uncoupled — acute is excluded from chronic — so the ratio cannot be pinned
+    by its own arithmetic. Under the coupled form (chronic containing acute,
+    divided by 4) any week where all 28-day volume lands inside the acute
+    window returns exactly 4.00 no matter what the athlete actually lifted.
+
+    Returns None when the chronic window is too sparse to compare against.
+    """
+    sql = """
+        SELECT
+            (SELECT COALESCE(SUM(hevy_total_volume_lbs), 0)
+             FROM daily_log WHERE date BETWEEN %s AND %s) AS acute_vol,
+            (SELECT COALESCE(SUM(hevy_total_volume_lbs), 0)
+             FROM daily_log WHERE date BETWEEN %s AND %s) AS chronic_vol,
+            (SELECT COUNT(*)
+             FROM daily_log WHERE date BETWEEN %s AND %s
+               AND hevy_session_count > 0)                AS chronic_sessions
+    """
+    acute_start   = target_date - timedelta(days=6)
+    chronic_start = target_date - timedelta(days=27)
+    chronic_end   = target_date - timedelta(days=7)
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            (acute_start, target_date,
+             chronic_start, chronic_end,
+             chronic_start, chronic_end),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return None
+    if (row.get("chronic_sessions") or 0) < ACWR_MIN_CHRONIC_SESSIONS:
+        return None
+
+    weekly_chronic = (_f(row.get("chronic_vol")) or 0.0) / 3.0
+    if weekly_chronic <= 0:
+        return None
+    return (_f(row.get("acute_vol")) or 0.0) / weekly_chronic
+
 
 def compute_training_score(conn, target_date):
     """
@@ -383,42 +436,7 @@ def compute_training_score(conn, target_date):
 
     Returns {'score': int, 'acwr': float, 'components': dict}
     """
-    # --- ACWR: try derived_daily first, then compute inline ---
-    acwr = None
-    sql_acwr = """
-        SELECT acwr_volume FROM derived_daily WHERE date = %s
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql_acwr, (target_date,))
-        row = cur.fetchone()
-        if row and row.get("acwr_volume") is not None:
-            acwr = _f(row["acwr_volume"])
-
-    if acwr is None:
-        # Compute inline: 7-day acute / 28-day chronic volume
-        sql_inline = """
-            SELECT
-                (SELECT COALESCE(SUM(hevy_total_volume_lbs), 0)
-                 FROM daily_log
-                 WHERE date >= %s AND date <= %s) AS acute_vol,
-                (SELECT COALESCE(SUM(hevy_total_volume_lbs), 0)
-                 FROM daily_log
-                 WHERE date >= %s AND date <= %s) AS chronic_vol
-        """
-        acute_start   = target_date - timedelta(days=6)
-        chronic_start = target_date - timedelta(days=27)
-        with conn.cursor() as cur:
-            cur.execute(sql_inline, (acute_start, target_date, chronic_start, target_date))
-            row = cur.fetchone()
-        if row:
-            acute_vol   = _f(row.get("acute_vol"))  or 0.0
-            chronic_vol = _f(row.get("chronic_vol")) or 0.0
-            # Normalize chronic to 7-day window for comparison
-            weekly_chronic = chronic_vol / 4.0 if chronic_vol > 0 else 0.0
-            if weekly_chronic > 0:
-                acwr = acute_vol / weekly_chronic
-            else:
-                acwr = None
+    acwr = compute_acwr(conn, target_date)
 
     # Score ACWR zone
     # 0.8-1.3 = optimal (95 pts), gradual falloff outside
@@ -508,21 +526,18 @@ def compute_training_score(conn, target_date):
         last_date = row["last_session_date"]
         days_since = (target_date - last_date).days
 
-        # DoggCrapp: 3-4 day gaps are normal. Ideal = 3-4 days.
-        if 3 <= days_since <= 4:
+        # Powerbuilding 3 runs Fri/Sat/Mon/Tue — gaps of 1-3 days are the
+        # program, not a lapse. (Under DoggCrapp this rewarded 3-4 day gaps
+        # and penalized back-to-back days, which PB3 does deliberately.)
+        if 1 <= days_since <= 3:
             consistency_score = 90
-        elif days_since == 2:
+        elif days_since == 4:
             consistency_score = 80
         elif days_since == 5:
-            consistency_score = 75
-        elif days_since == 1:
-            # Trained yesterday — possibly too frequent
-            consistency_score = 65
-        elif days_since >= 6:
-            # Getting stale
-            consistency_score = _clamp(75 - (days_since - 5) * 8)
-        else:
             consistency_score = 70
+        else:
+            # Getting stale
+            consistency_score = _clamp(70 - (days_since - 5) * 8)
 
     # --- Muscle group coverage: unique groups in last 7 days ---
     sql_muscles = """
@@ -534,7 +549,7 @@ def compute_training_score(conn, target_date):
     """
     muscle_start = target_date - timedelta(days=6)
     with conn.cursor() as cur:
-        cur.execute(sql_muscles, (target_date, muscle_start))
+        cur.execute(sql_muscles, (muscle_start, target_date))
         rows = cur.fetchall()
 
     unique_groups = set()
@@ -589,50 +604,45 @@ def compute_training_score(conn, target_date):
 
 def compute_nutrition_score(conn, target_date):
     """
-    Nutrition score (0-100), day-of-week aware:
+    Nutrition score (0-100), training-day aware:
       - Calorie adherence:           30%
       - Protein adherence (280g):    30%
       - Carb adherence (day-specific):20%
       - Micro coverage (fiber, sodium):20%
 
-    Tue/Wed = high-carb day (400g carbs, 3170 kcal)
-    Other days = low-carb day (300g carbs, 2770 kcal)
+    Training day     = 280g protein / 425g carbs / 60g fat / 3,360 kcal
+    Non-training day = 280g protein / 325g carbs / 60g fat / 2,960 kcal
 
     Returns {'score': int, 'targets': dict, 'components': dict}
     """
-    # Determine day-of-week targets
-    dow = target_date.weekday()  # 0=Mon, 1=Tue, 2=Wed, ...
-    high_carb_day = dow in (1, 2)  # Tuesday, Wednesday
-
-    if high_carb_day:
-        cal_target  = 3170.0
-        carb_target = 400.0
-    else:
-        cal_target  = 2770.0
-        carb_target = 300.0
-
-    protein_target = 280.0
-
-    targets = {
-        "calories":  cal_target,
-        "protein_g": protein_target,
-        "carbs_g":   carb_target,
-        "high_carb_day": high_carb_day,
-    }
-
     sql = """
         SELECT
             crono_calories,
             crono_protein_g,
             crono_carbs_g,
             crono_fiber_g,
-            crono_sodium_mg
+            crono_sodium_mg,
+            COALESCE(hevy_session_count, 0) AS hevy_session_count
         FROM daily_log
         WHERE date = %s
     """
     with conn.cursor() as cur:
         cur.execute(sql, (target_date,))
         row = cur.fetchone()
+
+    # Day type follows the session that actually happened, not the calendar —
+    # PB3 sessions move around and the carb target is meant to follow the work.
+    # (Replaces the old fixed Tue/Wed 5-2 carb cycle.)
+    training_day = bool(row and (row.get("hevy_session_count") or 0) > 0)
+    cal_target, carb_target = (3360.0, 425.0) if training_day else (2960.0, 325.0)
+    protein_target = 280.0
+
+    targets = {
+        "calories":  cal_target,
+        "protein_g": protein_target,
+        "carbs_g":   carb_target,
+        "training_day": training_day,
+    }
 
     if row is None:
         return {"score": None, "targets": targets, "components": {}}
@@ -968,8 +978,8 @@ def generate_hero_summary(category, score, data):
         protein_sc = components.get("protein")
         cal        = components.get("calories_raw")
         cal_sc     = components.get("calories")
-        high_carb  = targets.get("high_carb_day", False)
-        day_type   = "high-carb" if high_carb else "low-carb"
+        training   = targets.get("training_day", False)
+        day_type   = "training" if training else "rest"
 
         if score >= 80:
             parts = []

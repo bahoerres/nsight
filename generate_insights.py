@@ -25,6 +25,7 @@ from datetime import date, datetime, timedelta
 from calendar import monthrange
 
 from tz import today as local_today
+from scoring import compute_acwr
 
 import anthropic
 import psycopg2
@@ -239,22 +240,6 @@ def _fetch_weekly_data_raw(conn, week_start: date, week_end: date) -> dict | Non
     )
     baselines = cur.fetchone()
 
-    # ACWR
-    cur.execute(
-        """SELECT ROUND(
-               NULLIF(AVG(CASE WHEN date >= %s THEN hevy_total_volume_lbs END), 0) /
-               NULLIF(AVG(CASE WHEN date >= %s THEN hevy_total_volume_lbs END), 0)
-           ::numeric, 2) as acwr
-           FROM daily_log WHERE date BETWEEN %s AND %s""",
-        (
-            week_end - timedelta(days=6),
-            week_end - timedelta(days=27),
-            week_end - timedelta(days=27),
-            week_end,
-        ),
-    )
-    acwr_row = cur.fetchone()
-
     # Muscle groups this week
     cur.execute(
         """SELECT DISTINCT unnest(hevy_muscle_groups) as mg
@@ -270,7 +255,7 @@ def _fetch_weekly_data_raw(conn, week_start: date, week_end: date) -> dict | Non
         "current": dict(current),
         "prior": dict(prior),
         "baselines": dict(baselines),
-        "acwr": float(acwr_row["acwr"]) if acwr_row and acwr_row["acwr"] else None,
+        "acwr": compute_acwr(conn, week_end),
         "muscles": muscles,
         "exercise_data": fetch_weekly_exercise_data(conn, week_start, week_end),
     }
@@ -342,19 +327,6 @@ def _fetch_monthly_data_raw(conn, month_start: date, month_end: date) -> dict | 
     )
     prior = cur.fetchone()
 
-    # Top correlation findings from derived_daily
-    cur.execute(
-        """SELECT
-               ROUND(AVG(acwr_volume)::numeric, 2) as avg_acwr,
-               ROUND(AVG(hrv_delta_pct)::numeric, 1) as avg_hrv_delta,
-               SUM(CASE WHEN hrv_anomaly THEN 1 ELSE 0 END) as hrv_anomaly_days,
-               SUM(CASE WHEN sleep_anomaly THEN 1 ELSE 0 END) as sleep_anomaly_days,
-               SUM(CASE WHEN stress_anomaly THEN 1 ELSE 0 END) as stress_anomaly_days
-           FROM derived_daily WHERE date BETWEEN %s AND %s""",
-        (month_start, month_end),
-    )
-    derived = cur.fetchone()
-
     exercise_data = fetch_monthly_exercise_data(conn, month_start, month_end)
 
     return {
@@ -362,7 +334,7 @@ def _fetch_monthly_data_raw(conn, month_start: date, month_end: date) -> dict | 
         "month_end": month_end,
         "current": dict(current),
         "prior": dict(prior),
-        "derived": dict(derived) if derived else {},
+        "acwr": compute_acwr(conn, month_end),
         "exercise_data": exercise_data,
     }
 
@@ -724,13 +696,13 @@ NUTRITION:
     hrv_delta_str = f" ({hrv_delta:+.0f}% vs baseline)" if hrv_delta is not None else ""
 
     day_name = date.fromisoformat(str(d["date"])).strftime("%A")
-    is_high_carb = day_name in ("Tuesday", "Wednesday")
-    carb_day_type = "HIGH-CARB" if is_high_carb else "LOW-CARB"
+    trained = (d.get("hevy_session_count") or 0) > 0
+    carb_day_type = "TRAINING" if trained else "NON-TRAINING"
     carb_target = (
-        "400g carbs / 3,170 kcal" if is_high_carb else "300g carbs / 2,770 kcal"
+        "425g carbs / 3,360 kcal" if trained else "325g carbs / 2,960 kcal"
     )
     return f"""You are a personal health analyst. Here is the athlete's data for {day_name}, {d["date"]}:
-NOTE: {day_name} is a {carb_day_type} day. Evaluate nutrition against {carb_day_type} targets: 280g protein / {carb_target} / 50g fat.
+NOTE: {day_name} was a {carb_day_type} day. Evaluate nutrition against {carb_day_type} targets: 280g protein / {carb_target} / 60g fat.
 
 {day_name.upper()}'S METRICS:
 - HRV: {_fmt(d.get("hrv_nightly_avg"), ".1f", " ms")}{hrv_delta_str} (personal baseline: {_fmt(b.get("hrv_baseline"), ".1f", " ms")})
@@ -772,7 +744,7 @@ def build_weekly_prompt(data: dict) -> str:
     if c.get("crono_days") and c["crono_days"] > 0:
         nutrition_section = f"""
 NUTRITION ({c["crono_days"]} days logged):
-- Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~2,884)
+- Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~3,189 on a 4-day training week)
 - Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target 280g)"""
 
     muscles_str = ", ".join(data["muscles"]) if data["muscles"] else "none logged"
@@ -832,7 +804,7 @@ WEEKLY AVERAGES vs BASELINE:
 TRAINING THIS WEEK:
 - Sessions: {c.get("sessions", 0)} (prior week: {p.get("prior_sessions", "n/a")})
 - Total volume: {_fmt(c.get("volume"), ",.0f", " lbs")} (prior week: {_fmt(p.get("prior_volume"), ",.0f", " lbs")})
-- ACWR at week end: {data["acwr"] or "n/a"}
+- ACWR at week end: {f'{data["acwr"]:.2f}' if data.get("acwr") is not None else "n/a (not enough training history in the prior 21 days to compare against)"}
 - Muscle groups hit: {muscles_str}
 {exercise_section}{pr_section}{muscle_vol_section}
 {nutrition_section}
@@ -846,7 +818,7 @@ SIGNAL FILTERING RULES (follow strictly):
 - Body battery is unreliable for this athlete due to low HRV baseline distorting Garmin's algorithm. Do not use body battery as a primary recovery indicator. It may appear as minor supporting context only, never as a headline finding or basis for a recommendation.
 - HRV: Do not characterize weekly average changes under 2ms or 15% as trends, declines, or concerns. At an 18-24ms baseline, small absolute movements are normal variance, not signals.
 - Do not build narrative arcs around metrics that are within normal variance. If recovery metrics are stable, say "recovery held steady" and move on — do not speculate about what might happen if they drift.
-- ACWR is the primary training load indicator. Resting HR trend direction is a useful recovery signal. Sleep architecture (deep sleep minutes) matters more than total sleep hours. Prioritize these over body battery and raw HRV values.
+- ACWR is the primary training load indicator when it is available; when it reads n/a, use volume trajectory and session count instead and do not speculate about load ratio. Resting HR trend direction is a useful recovery signal. Sleep architecture (deep sleep minutes) matters more than total sleep hours. Prioritize these over body battery and raw HRV values.
 - If there is nothing genuinely concerning, say the week was clean. Do not invent watch-items from noise.
 
 Do not include a title or heading — the UI already provides one. Write plain prose only."""
@@ -893,7 +865,6 @@ def build_rolling_monthly_prompt(data: dict) -> str:
 def build_monthly_prompt(data: dict) -> str:
     c = data["current"]
     p = data["prior"]
-    d = data.get("derived", {})
     ex_data = data.get("exercise_data", {})
 
     # Volume comparison
@@ -904,20 +875,16 @@ def build_monthly_prompt(data: dict) -> str:
             vol_delta = f" ({pct:+.0f}% vs prior 30 days)"
 
     anomaly_section = ""
-    if d:
+    if data.get("acwr") is not None:
         anomaly_section = f"""
-ANOMALY SUMMARY:
-- HRV anomaly days: {d.get("hrv_anomaly_days", 0)}
-- Sleep anomaly days: {d.get("sleep_anomaly_days", 0)}
-- Stress anomaly days: {d.get("stress_anomaly_days", 0)}
-- Avg HRV delta from baseline: {_fmt(d.get("avg_hrv_delta"), "+.1f", "%")}
-- Avg ACWR: {_fmt(d.get("avg_acwr"), ".2f")}"""
+TRAINING LOAD:
+- ACWR at month end: {data["acwr"]:.2f} (7-day volume vs the prior 21 days, weekly-normalized)"""
 
     nutrition_section = ""
     if c.get("crono_days") and c["crono_days"] > 0:
         nutrition_section = f"""
 NUTRITION ({c["crono_days"]} days logged of 30):
-- Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~2,884)
+- Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~3,189 on a 4-day training week)
 - Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target 280g)"""
 
     # Exercise progression section (best set per week, showing trend)
