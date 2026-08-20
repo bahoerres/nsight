@@ -30,14 +30,19 @@ TRAINING STYLE:
   four weeks of its own baseline.
 
 NUTRITION:
-- Training/non-training carb split (follows the actual session, not the calendar):
-  Training days:     280g protein / 425g carbs / 60g fat / 3,360 kcal
-  Non-training days: 280g protein / 325g carbs / 60g fat / 2,960 kcal
-  Weekly avg target: ~3,189 kcal/day on a 4-day training week
-- Training-day intake is intentional. Do not flag as surplus. Evaluate each day
-  against the target for that day's type.
-- This replaced a fixed 5/2 Tue/Wed carb cycle. Ignore any older reference to
-  high-carb/low-carb days by day of week.
+- 4 high days / 3 low days per week:
+  High days: 280g protein / 425g carbs / 60g fat / 3,360 kcal
+  Low days:  280g protein / 325g carbs / 60g fat / 2,960 kcal
+  Weekly avg target: ~3,189 kcal/day
+- The 4/3 split is the rule; the weekly ratio is what drives bodyweight
+  progression. High days usually land on training days because that is
+  convenient, but they are NOT required to. A high day on a rest day, or a low
+  day on a training day, is a normal swap — not a compliance failure. Only the
+  weekly count is worth commenting on, and only if it drifts off 4/3.
+- High-day intake is intentional. Never flag it as a surplus.
+- This replaced a 4 high / 2 low cycle with a double-carb refeed, which was less
+  balanced for bodyweight progression. Ignore any older reference to fixed
+  high-carb days by day of week (the earlier Tue/Wed 5-2 scheme is retired).
 - Additional targets: Fiber 26-34g | Water 120 oz | Sodium 3,500-4,500mg |
   Potassium 3,800mg
 

@@ -744,7 +744,7 @@ def build_weekly_prompt(data: dict) -> str:
     if c.get("crono_days") and c["crono_days"] > 0:
         nutrition_section = f"""
 NUTRITION ({c["crono_days"]} days logged):
-- Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~3,189 on a 4-day training week)
+- Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~3,189 at 4 high / 3 low days)
 - Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target 280g)"""
 
     muscles_str = ", ".join(data["muscles"]) if data["muscles"] else "none logged"
@@ -884,7 +884,7 @@ TRAINING LOAD:
     if c.get("crono_days") and c["crono_days"] > 0:
         nutrition_section = f"""
 NUTRITION ({c["crono_days"]} days logged of 30):
-- Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~3,189 on a 4-day training week)
+- Avg calories: {_fmt(c.get("cal_avg"), ",.0f")} (weekly avg target ~3,189 at 4 high / 3 low days)
 - Avg protein: {_fmt(c.get("protein_avg"), ".0f", "g")} (target 280g)"""
 
     # Exercise progression section (best set per week, showing trend)
